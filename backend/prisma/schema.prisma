@@ -1,0 +1,279 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  OPERATOR
+  PROFESSIONAL
+  ANALYST
+  CUSTOMER
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELED
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  users                      User[]
+  filiais                    Filial[]
+  roleAssignments            RoleAssignment[]
+  professionals              Professional[]
+  services                   Service[]
+  appointments               Appointment[]
+  workingPeriods             WorkingPeriod[]
+  blockedTimes               BlockedTime[]
+  professionalServices       ProfessionalService[]
+  appointmentServices        AppointmentService[]
+  appointmentStatusHistories AppointmentStatusHistory[]
+  invitations                Invitation[]
+  userSessions               UserSession[]
+  filialSettings             FilialSettings[]
+}
+
+model User {
+  id              String   @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id])
+  name            String
+  email           String   @unique
+  phone           String?
+  passwordHash    String
+  isEmailVerified Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  roleAssignments RoleAssignment[]
+  professional    Professional?
+  sessions        UserSession[]
+}
+
+model RoleAssignment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      Role
+  filialId  String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  user   User    @relation(fields: [userId], references: [id])
+  filial Filial? @relation(fields: [filialId], references: [id])
+
+  @@index([tenantId, userId, role])
+  @@index([tenantId, filialId])
+}
+
+model Filial {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  timezone    String
+  address     String?
+  phone       String?
+  slug        String
+  createdAt   DateTime @default(now())
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  professionals   Professional[]
+  services        Service[]
+  settings        FilialSettings?
+  roleAssignments RoleAssignment[]
+  appointments    Appointment[]
+  invitations     Invitation[]
+
+  @@unique([tenantId, slug])
+}
+
+model FilialSettings {
+  id              String @id @default(cuid())
+  tenantId        String
+  filialId        String @unique
+  slotGranularity Int?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  filial Filial @relation(fields: [filialId], references: [id])
+}
+
+model Professional {
+  id          String   @id @default(cuid())
+  tenantId    String
+  filialId    String
+  userId      String?  @unique
+  name        String
+  bio         String?
+  specialties String?
+  isActive    Boolean  @default(true)
+  timezone    String?
+  createdAt   DateTime @default(now())
+
+  tenant               Tenant                @relation(fields: [tenantId], references: [id])
+  filial               Filial                @relation(fields: [filialId], references: [id])
+  user                 User?                 @relation(fields: [userId], references: [id])
+  periods              WorkingPeriod[]
+  blocks               BlockedTime[]
+  professionalServices ProfessionalService[]
+  appointments         Appointment[]
+  invitations          Invitation[]
+}
+
+model WorkingPeriod {
+  id             String   @id @default(cuid())
+  tenantId       String
+  professionalId String
+  weekday        Int
+  startMinutes   Int
+  endMinutes     Int
+  createdAt      DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id])
+
+  @@index([tenantId, professionalId, weekday])
+}
+
+model BlockedTime {
+  id             String   @id @default(cuid())
+  tenantId       String
+  professionalId String
+  startsAt       DateTime
+  endsAt         DateTime
+  reason         String?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id])
+
+  @@index([tenantId, professionalId, startsAt])
+}
+
+model Service {
+  id              String  @id @default(cuid())
+  tenantId        String
+  filialId        String
+  name            String
+  durationMinutes Int
+  bufferMinutes   Int     @default(0)
+  priceCents      Int
+  isActive        Boolean @default(true)
+
+  tenant               Tenant                @relation(fields: [tenantId], references: [id])
+  filial               Filial                @relation(fields: [filialId], references: [id])
+  professionalServices ProfessionalService[]
+  appointmentServices  AppointmentService[]
+}
+
+model ProfessionalService {
+  id             String @id @default(cuid())
+  tenantId       String
+  professionalId String
+  serviceId      String
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id])
+  service      Service      @relation(fields: [serviceId], references: [id])
+
+  @@unique([tenantId, professionalId, serviceId])
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  tenantId       String
+  filialId       String
+  professionalId String
+  startsAt       DateTime
+  endsAt         DateTime
+  customerName   String
+  customerPhone  String
+  customerEmail  String?
+  status         AppointmentStatus @default(CONFIRMED)
+  notes          String?
+  createdAt      DateTime          @default(now())
+
+  tenant        Tenant                     @relation(fields: [tenantId], references: [id])
+  filial        Filial                     @relation(fields: [filialId], references: [id])
+  professional  Professional               @relation(fields: [professionalId], references: [id])
+  services      AppointmentService[]
+  statusHistory AppointmentStatusHistory[]
+
+  @@index([tenantId, professionalId, startsAt])
+}
+
+model AppointmentService {
+  id            String @id @default(cuid())
+  tenantId      String
+  appointmentId String
+  serviceId     String
+  order         Int?
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  service     Service     @relation(fields: [serviceId], references: [id])
+}
+
+model AppointmentStatusHistory {
+  id            String             @id @default(cuid())
+  tenantId      String
+  appointmentId String
+  fromStatus    AppointmentStatus?
+  toStatus      AppointmentStatus
+  at            DateTime           @default(now())
+  reason        String?
+  userId        String?
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, appointmentId, at])
+}
+
+model Invitation {
+  id             String    @id @default(cuid())
+  tenantId       String
+  professionalId String
+  filialId       String
+  email          String
+  tokenHash      String
+  status         String    @default("PENDING")
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id])
+  filial       Filial       @relation(fields: [filialId], references: [id])
+
+  @@index([tenantId, professionalId, status])
+}
+
+model UserSession {
+  id          String    @id @default(cuid())
+  userId      String
+  tenantId    String?
+  refreshHash String
+  userAgent   String?
+  ip          String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  user   User    @relation(fields: [userId], references: [id])
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([userId, expiresAt])
+}

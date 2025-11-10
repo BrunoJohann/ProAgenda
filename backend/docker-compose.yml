@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: proagenda-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: proagenda
+      POSTGRES_PASSWORD: proagenda_dev
+      POSTGRES_DB: agenda_mvp
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U proagenda']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: proagenda-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://proagenda:proagenda_dev@postgres:5432/agenda_mvp
+      JWT_SECRET: supersecret_change_in_production
+      JWT_EXPIRES_IN: 15m
+      REFRESH_SECRET: superrefreshsecret_change_in_production
+      REFRESH_EXPIRES_IN: 7d
+      APP_DEFAULT_TIMEZONE: America/Sao_Paulo
+      SLOT_GRANULARITY_MINUTES: 15
+      PORT: 3001
+      EMAIL_FROM: no-reply@proagenda.com
+    ports:
+      - '3001:3001'
+    command: >
+      sh -c "
+        pnpm prisma:migrate:deploy &&
+        pnpm prisma:seed &&
+        node dist/main
+      "
+
+volumes:
+  postgres_data:
+
