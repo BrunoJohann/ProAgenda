@@ -29,7 +29,7 @@ model Tenant {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   users                      User[]
   filiais                    Filial[]
@@ -56,7 +56,7 @@ model User {
   phone           String?
   passwordHash    String
   isEmailVerified Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
 
   roleAssignments RoleAssignment[]
   professional    Professional?
@@ -69,7 +69,7 @@ model RoleAssignment {
   userId    String
   role      Role
   filialId  String?
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   user   User    @relation(fields: [userId], references: [id])
@@ -88,7 +88,7 @@ model Filial {
   address     String?
   phone       String?
   slug        String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
   tenant          Tenant           @relation(fields: [tenantId], references: [id])
   professionals   Professional[]
@@ -121,7 +121,7 @@ model Professional {
   specialties String?
   isActive    Boolean  @default(true)
   timezone    String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
   filial               Filial                @relation(fields: [filialId], references: [id])
@@ -140,7 +140,7 @@ model WorkingPeriod {
   weekday        Int
   startMinutes   Int
   endMinutes     Int
-  createdAt      DateTime @default(now())
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
   professional Professional @relation(fields: [professionalId], references: [id])
@@ -152,8 +152,8 @@ model BlockedTime {
   id             String   @id @default(cuid())
   tenantId       String
   professionalId String
-  startsAt       DateTime
-  endsAt         DateTime
+  startsAt       DateTime @db.Timestamptz(3)
+  endsAt         DateTime @db.Timestamptz(3)
   reason         String?
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
@@ -196,14 +196,14 @@ model Appointment {
   tenantId       String
   filialId       String
   professionalId String
-  startsAt       DateTime
-  endsAt         DateTime
+  startsAt       DateTime          @db.Timestamptz(3)
+  endsAt         DateTime          @db.Timestamptz(3)
   customerName   String
   customerPhone  String
   customerEmail  String?
   status         AppointmentStatus @default(CONFIRMED)
   notes          String?
-  createdAt      DateTime          @default(now())
+  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
 
   tenant        Tenant                     @relation(fields: [tenantId], references: [id])
   filial        Filial                     @relation(fields: [filialId], references: [id])
@@ -232,7 +232,7 @@ model AppointmentStatusHistory {
   appointmentId String
   fromStatus    AppointmentStatus?
   toStatus      AppointmentStatus
-  at            DateTime           @default(now())
+  at            DateTime           @default(now()) @db.Timestamptz(3)
   reason        String?
   userId        String?
 
@@ -250,9 +250,9 @@ model Invitation {
   email          String
   tokenHash      String
   status         String    @default("PENDING")
-  expiresAt      DateTime
-  acceptedAt     DateTime?
-  createdAt      DateTime  @default(now())
+  expiresAt      DateTime  @db.Timestamptz(3)
+  acceptedAt     DateTime? @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
   professional Professional @relation(fields: [professionalId], references: [id])
@@ -268,9 +268,9 @@ model UserSession {
   refreshHash String
   userAgent   String?
   ip          String?
-  expiresAt   DateTime
-  createdAt   DateTime  @default(now())
-  revokedAt   DateTime?
+  expiresAt   DateTime  @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt   DateTime? @db.Timestamptz(3)
 
   user   User    @relation(fields: [userId], references: [id])
   tenant Tenant? @relation(fields: [tenantId], references: [id])

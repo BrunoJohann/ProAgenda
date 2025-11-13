@@ -74,6 +74,29 @@ export class UsersService {
     });
   }
 
+  async findById(tenantSlug: string, id: string) {
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id, tenantId: tenant.id },
+      include: {
+        roleAssignments: {
+          include: {
+            filial: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
   async findOne(tenantSlug: string, id: string) {
     const tenant = await this.tenantsService.findBySlug(tenantSlug);
 

@@ -4,7 +4,6 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './core/prisma/prisma.module';
 import { AuthModule } from './core/auth/auth.module';
-import { TenancyModule } from './core/tenancy/tenancy.module';
 import { TenantsModule } from './domains/tenants/tenants.module';
 import { FiliaisModule } from './domains/filiais/filiais.module';
 import { UsersModule } from './domains/users/users.module';
@@ -41,7 +40,6 @@ import { envValidation } from './core/config/env.validation';
       },
     ]),
     PrismaModule,
-    TenancyModule,
     AuthModule,
     TenantsModule,
     FiliaisModule,

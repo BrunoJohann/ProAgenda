@@ -30,6 +30,13 @@ export class UsersController {
     return this.usersService.findAll(tenant);
   }
 
+  @Get(':id')
+  @Roles(Role.OWNER, Role.ADMIN)
+  @ApiOperation({ summary: 'Get user by ID' })
+  findById(@CurrentUser('tenant') tenant: string, @Param('id') id: string) {
+    return this.usersService.findById(tenant, id);
+  }
+
   @Get(':id/roles')
   @Roles(Role.OWNER, Role.ADMIN)
   @ApiOperation({ summary: 'Get user role assignments' })
