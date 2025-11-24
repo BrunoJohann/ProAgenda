@@ -56,6 +56,7 @@ export class CalendarController {
 
     const formattedAppointments = appointments.map(appt => ({
       ...appt,
+      customerPhone: appt.customerPhone || '',
       notes: appt.notes ?? undefined,
     }));
 
@@ -93,6 +94,7 @@ export class CalendarController {
 
     const formattedAppointment = {
       ...appointment,
+      customerPhone: appointment.customerPhone || '',
       notes: appointment.notes ?? undefined,
       filial: {
         name: appointment.filial.name,

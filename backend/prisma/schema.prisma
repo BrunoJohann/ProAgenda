@@ -25,6 +25,26 @@ enum AppointmentStatus {
   CANCELED
 }
 
+enum PhoneType {
+  WHATSAPP
+  MOBILE
+  HOME
+  WORK
+}
+
+enum CustomerType {
+  REGISTERED
+  IDENTIFIED_NO_LOGIN
+  WALKIN_NAME_ONLY
+}
+
+enum AppointmentSource {
+  INTERNAL
+  CUSTOMER_PORTAL
+  WHATSAPP
+  INTEGRATION
+}
+
 model Tenant {
   id        String   @id @default(cuid())
   name      String
@@ -37,6 +57,7 @@ model Tenant {
   professionals              Professional[]
   services                   Service[]
   appointments               Appointment[]
+  customers                  Customer[]
   workingPeriods             WorkingPeriod[]
   blockedTimes               BlockedTime[]
   professionalServices       ProfessionalService[]
@@ -60,6 +81,7 @@ model User {
 
   roleAssignments RoleAssignment[]
   professional    Professional?
+  customer        Customer?
   sessions        UserSession[]
 }
 
@@ -96,6 +118,7 @@ model Filial {
   settings        FilialSettings?
   roleAssignments RoleAssignment[]
   appointments    Appointment[]
+  customers       Customer[]
   invitations     Invitation[]
 
   @@unique([tenantId, slug])
@@ -198,9 +221,12 @@ model Appointment {
   professionalId String
   startsAt       DateTime          @db.Timestamptz(3)
   endsAt         DateTime          @db.Timestamptz(3)
+  customerId     String?
   customerName   String
-  customerPhone  String
+  customerPhone  String?
   customerEmail  String?
+  customerType   CustomerType
+  source         AppointmentSource
   status         AppointmentStatus @default(CONFIRMED)
   notes          String?
   createdAt      DateTime          @default(now()) @db.Timestamptz(3)
@@ -208,10 +234,12 @@ model Appointment {
   tenant        Tenant                     @relation(fields: [tenantId], references: [id])
   filial        Filial                     @relation(fields: [filialId], references: [id])
   professional  Professional               @relation(fields: [professionalId], references: [id])
+  customer      Customer?                  @relation(fields: [customerId], references: [id])
   services      AppointmentService[]
   statusHistory AppointmentStatusHistory[]
 
   @@index([tenantId, professionalId, startsAt])
+  @@index([tenantId, customerId])
 }
 
 model AppointmentService {
@@ -259,6 +287,41 @@ model Invitation {
   filial       Filial       @relation(fields: [filialId], references: [id])
 
   @@index([tenantId, professionalId, status])
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  tenantId     String
+  filialId     String?
+  name         String
+  email        String?
+  document     String?
+  documentType String?
+  userId       String?  @unique
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  filial       Filial?          @relation(fields: [filialId], references: [id])
+  user         User?            @relation(fields: [userId], references: [id])
+  phones       CustomerPhone[]
+  appointments Appointment[]
+
+  @@unique([tenantId, document])
+  @@index([tenantId, email])
+}
+
+model CustomerPhone {
+  id         String    @id @default(cuid())
+  customerId String
+  phone      String
+  type       PhoneType
+  isPrimary  Boolean   @default(false)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([phone])
 }
 
 model UserSession {

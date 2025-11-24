@@ -14,6 +14,8 @@ import { BlocksModule } from './domains/blocks/blocks.module';
 import { AppointmentsModule } from './domains/appointments/appointments.module';
 import { MetricsModule } from './domains/metrics/metrics.module';
 import { CalendarModule } from './core/calendar/calendar.module';
+import { CustomersModule } from './domains/customers/customers.module';
+import { IntegrationsModule } from './domains/integrations/integrations.module';
 import { envValidation } from './core/config/env.validation';
 
 @Module({
@@ -44,6 +46,7 @@ import { envValidation } from './core/config/env.validation';
     TenantsModule,
     FiliaisModule,
     UsersModule,
+    CustomersModule,
     ProfessionalsModule,
     ServicesModule,
     SchedulingModule,
@@ -51,6 +54,7 @@ import { envValidation } from './core/config/env.validation';
     AppointmentsModule,
     MetricsModule,
     CalendarModule,
+    IntegrationsModule,
   ],
   providers: [
     {

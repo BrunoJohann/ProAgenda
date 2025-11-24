@@ -112,6 +112,18 @@ async function main() {
     },
   });
 
+  // Create customer user (with login)
+  const customerPassword = await argon2.hash('customer123');
+  const customerUser = await prisma.user.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'Roberto Cliente',
+      email: 'roberto@example.com',
+      passwordHash: customerPassword,
+      isEmailVerified: true,
+    },
+  });
+
   console.log('✅ Created users');
 
   // Create role assignments
@@ -157,7 +169,128 @@ async function main() {
     },
   });
 
+  // Assign customer role
+  await prisma.roleAssignment.create({
+    data: {
+      tenantId: tenant.id,
+      userId: customerUser.id,
+      role: Role.CUSTOMER,
+    },
+  });
+
   console.log('✅ Created role assignments');
+
+  // Create customers
+  const customer1 = await prisma.customer.create({
+    data: {
+      tenantId: tenant.id,
+      filialId: centro.id,
+      userId: customerUser.id, // Customer with login (REGISTERED)
+      name: 'Roberto Cliente',
+      email: 'roberto@example.com',
+      document: '12345678900',
+      documentType: 'CPF',
+    },
+  });
+
+  // Add phones for customer1
+  await prisma.customerPhone.createMany({
+    data: [
+      {
+        customerId: customer1.id,
+        phone: '+5511999998888',
+        type: 'WHATSAPP',
+        isPrimary: true,
+      },
+      {
+        customerId: customer1.id,
+        phone: '+5511988887777',
+        type: 'MOBILE',
+        isPrimary: false,
+      },
+    ],
+  });
+
+  const customer2 = await prisma.customer.create({
+    data: {
+      tenantId: tenant.id,
+      filialId: centro.id,
+      name: 'Maria Oliveira',
+      email: 'maria.oliveira@example.com',
+      document: '98765432100',
+      documentType: 'CPF',
+    },
+  });
+
+  await prisma.customerPhone.create({
+    data: {
+      customerId: customer2.id,
+      phone: '+5511977776666',
+      type: 'WHATSAPP',
+      isPrimary: true,
+    },
+  });
+
+  const customer3 = await prisma.customer.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'Carlos Souza',
+      email: 'carlos@example.com',
+    },
+  });
+
+  await prisma.customerPhone.create({
+    data: {
+      customerId: customer3.id,
+      phone: '+5511988887777',
+      type: 'MOBILE',
+      isPrimary: true,
+    },
+  });
+
+  const customer4 = await prisma.customer.create({
+    data: {
+      tenantId: tenant.id,
+      filialId: moinhos.id,
+      name: 'Ana Paula Ferreira',
+      email: 'ana.paula@example.com',
+    },
+  });
+
+  await prisma.customerPhone.createMany({
+    data: [
+      {
+        customerId: customer4.id,
+        phone: '+5511966665555',
+        type: 'WHATSAPP',
+        isPrimary: true,
+      },
+      {
+        customerId: customer4.id,
+        phone: '+5511944443333',
+        type: 'HOME',
+        isPrimary: false,
+      },
+    ],
+  });
+
+  const customer5 = await prisma.customer.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'Paulo Mendes',
+    },
+  });
+
+  await prisma.customerPhone.create({
+    data: {
+      customerId: customer5.id,
+      phone: '+5511955554444',
+      type: 'WHATSAPP',
+      isPrimary: true,
+    },
+  });
+
+  console.log('✅ Created customers and phones');
 
   // Create professionals
   const prof1Centro = await prisma.professional.create({
@@ -361,9 +494,12 @@ async function main() {
       professionalId: prof1Centro.id,
       startsAt: nextWeek,
       endsAt: appt1End,
+      customerId: customer3.id,
       customerName: 'Carlos Souza',
       customerPhone: '+5511988887777',
       customerEmail: 'carlos@example.com',
+      customerType: 'IDENTIFIED_NO_LOGIN',
+      source: 'INTERNAL',
       status: 'CONFIRMED',
       notes: 'Cliente regular',
     },
@@ -402,8 +538,12 @@ async function main() {
       professionalId: prof2Centro.id,
       startsAt: yesterday,
       endsAt: appt2End,
-      customerName: 'Ana Paula',
+      customerId: customer2.id,
+      customerName: 'Maria Oliveira',
       customerPhone: '+5511977776666',
+      customerEmail: 'maria.oliveira@example.com',
+      customerType: 'IDENTIFIED_NO_LOGIN',
+      source: 'CUSTOMER_PORTAL',
       status: 'CANCELED',
     },
   });
@@ -435,6 +575,139 @@ async function main() {
     ],
   });
 
+  // Create appointment from customer portal (registered customer)
+  const nextMonth = new Date();
+  nextMonth.setDate(nextMonth.getDate() + 30);
+  nextMonth.setHours(14, 30, 0, 0);
+
+  const appt3End = new Date(nextMonth);
+  appt3End.setMinutes(appt3End.getMinutes() + 60); // 30 + 25 + 5
+
+  const appt3 = await prisma.appointment.create({
+    data: {
+      tenantId: tenant.id,
+      filialId: centro.id,
+      professionalId: prof1Centro.id,
+      startsAt: nextMonth,
+      endsAt: appt3End,
+      customerId: customer1.id,
+      customerName: 'Roberto Cliente',
+      customerPhone: '+5511999998888',
+      customerEmail: 'roberto@example.com',
+      customerType: 'REGISTERED',
+      source: 'CUSTOMER_PORTAL',
+      status: 'CONFIRMED',
+    },
+  });
+
+  await prisma.appointmentService.createMany({
+    data: [
+      {
+        tenantId: tenant.id,
+        appointmentId: appt3.id,
+        serviceId: corteCentro.id,
+        order: 0,
+      },
+      {
+        tenantId: tenant.id,
+        appointmentId: appt3.id,
+        serviceId: barbaCentro.id,
+        order: 1,
+      },
+    ],
+  });
+
+  await prisma.appointmentStatusHistory.create({
+    data: {
+      tenantId: tenant.id,
+      appointmentId: appt3.id,
+      toStatus: 'CONFIRMED',
+      reason: 'Appointment created via customer portal',
+    },
+  });
+
+  // Create appointment from WhatsApp
+  const nextWeek2 = new Date();
+  nextWeek2.setDate(nextWeek2.getDate() + 8);
+  nextWeek2.setHours(16, 0, 0, 0);
+
+  const appt4End = new Date(nextWeek2);
+  appt4End.setMinutes(appt4End.getMinutes() + 30);
+
+  const appt4 = await prisma.appointment.create({
+    data: {
+      tenantId: tenant.id,
+      filialId: moinhos.id,
+      professionalId: prof1Moinhos.id,
+      startsAt: nextWeek2,
+      endsAt: appt4End,
+      customerId: customer5.id,
+      customerName: 'Paulo Mendes',
+      customerPhone: '+5511955554444',
+      customerType: 'IDENTIFIED_NO_LOGIN',
+      source: 'WHATSAPP',
+      status: 'CONFIRMED',
+      notes: 'Agendamento via WhatsApp',
+    },
+  });
+
+  await prisma.appointmentService.create({
+    data: {
+      tenantId: tenant.id,
+      appointmentId: appt4.id,
+      serviceId: corteMoinhos.id,
+      order: 0,
+    },
+  });
+
+  await prisma.appointmentStatusHistory.create({
+    data: {
+      tenantId: tenant.id,
+      appointmentId: appt4.id,
+      toStatus: 'CONFIRMED',
+      reason: 'Appointment created via WhatsApp',
+    },
+  });
+
+  // Create walk-in appointment (no customer record)
+  const today = new Date();
+  today.setHours(11, 0, 0, 0);
+
+  const appt5End = new Date(today);
+  appt5End.setMinutes(appt5End.getMinutes() + 20);
+
+  const appt5 = await prisma.appointment.create({
+    data: {
+      tenantId: tenant.id,
+      filialId: centro.id,
+      professionalId: prof2Centro.id,
+      startsAt: today,
+      endsAt: appt5End,
+      customerName: 'Walk-in Cliente',
+      customerType: 'WALKIN_NAME_ONLY',
+      source: 'INTERNAL',
+      status: 'CONFIRMED',
+    },
+  });
+
+  await prisma.appointmentService.create({
+    data: {
+      tenantId: tenant.id,
+      appointmentId: appt5.id,
+      serviceId: sobrancelhaCentro.id,
+      order: 0,
+    },
+  });
+
+  await prisma.appointmentStatusHistory.create({
+    data: {
+      tenantId: tenant.id,
+      appointmentId: appt5.id,
+      toStatus: 'CONFIRMED',
+      reason: 'Walk-in appointment',
+    },
+  });
+
   console.log('✅ Created appointments');
 
   // Create a pending invitation
@@ -457,13 +730,16 @@ async function main() {
 
   console.log('\n🎉 Seed completed successfully!\n');
   console.log('📝 Test credentials:');
-  console.log('   Owner:    owner@acme.com / owner123');
-  console.log('   Admin:    admin@acme.com / admin123');
-  console.log('   Manager:  manager@acme.com / manager123');
-  console.log('   Operator: operator@acme.com / operator123');
+  console.log('   Owner:        owner@acme.com / owner123');
+  console.log('   Admin:        admin@acme.com / admin123');
+  console.log('   Manager:      manager@acme.com / manager123');
+  console.log('   Operator:     operator@acme.com / operator123');
   console.log('   Professional: joao@acme.com / prof123');
+  console.log('   Customer:     roberto@example.com / customer123');
   console.log('\n🏢 Tenant: acme');
-  console.log('🏪 Filiais: centro, moinhos\n');
+  console.log('🏪 Filiais: centro, moinhos');
+  console.log('👥 Customers: 5 customers with various phone types');
+  console.log('📅 Appointments: 5 appointments (INTERNAL, CUSTOMER_PORTAL, WHATSAPP sources)\n');
 }
 
 main()

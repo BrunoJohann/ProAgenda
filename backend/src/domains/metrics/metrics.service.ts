@@ -123,6 +123,12 @@ export class MetricsService {
     // Heatmap (weekday x hour)
     const heatmap = this.calculateHeatmap(confirmed);
 
+    // Metrics by source
+    const bySource = this.calculateBySource(appointments);
+
+    // Metrics by customer type
+    const byCustomerType = this.calculateByCustomerType(appointments);
+
     return {
       summary: {
         appointments: totalAppointments,
@@ -130,6 +136,8 @@ export class MetricsService {
         cancelRate: Math.round(cancelRate * 100) / 100,
         avgDurationMin: Math.round(avgDurationMin),
         occupancyPct: Math.round(avgOccupancy * 100) / 100,
+        bySource,
+        byCustomerType,
       },
       timeseries: {
         byDay,
@@ -283,6 +291,47 @@ export class MetricsService {
       const [weekday, hour] = key.split('-').map(Number);
       return { weekday, hour, appointments };
     });
+  }
+
+  private calculateBySource(
+    appointments: Array<{ status: string; source?: string }>,
+  ) {
+    const counts = {
+      INTERNAL: 0,
+      CUSTOMER_PORTAL: 0,
+      WHATSAPP: 0,
+      INTEGRATION: 0,
+    };
+
+    for (const appt of appointments) {
+      if (appt.status === 'CONFIRMED' && appt.source) {
+        if (counts.hasOwnProperty(appt.source)) {
+          counts[appt.source]++;
+        }
+      }
+    }
+
+    return counts;
+  }
+
+  private calculateByCustomerType(
+    appointments: Array<{ status: string; customerType?: string }>,
+  ) {
+    const counts = {
+      REGISTERED: 0,
+      IDENTIFIED_NO_LOGIN: 0,
+      WALKIN_NAME_ONLY: 0,
+    };
+
+    for (const appt of appointments) {
+      if (appt.status === 'CONFIRMED' && appt.customerType) {
+        if (counts.hasOwnProperty(appt.customerType)) {
+          counts[appt.customerType]++;
+        }
+      }
+    }
+
+    return counts;
   }
 }
 

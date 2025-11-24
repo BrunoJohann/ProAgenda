@@ -80,16 +80,36 @@ This document enumerates all HTTP endpoints exposed by the ProAgenda backend so 
 | DELETE | /v1/admin/filiais/:filialId/services/:sid/professionals/:pid | Unlink professional from service | JWT Bearer | Roles: OWNER, ADMIN, MANAGER; `ScopeGuard` | Path: `filialId`, `sid`, `pid` |
 | GET | /v1/public/services | List active services (public catalog) | Public | - | Query: `tenant`, `filialId`, `professionalId?` |
 
-## Appointments (public + professional self-service)
+## Customers (admin)
+
+| Method | Path | Summary | Auth | Roles / Scope | Payload & Params |
+| --- | --- | --- | --- | --- | --- |
+| POST | /v1/admin/customers | Create a new customer | JWT Bearer | Roles: OWNER, ADMIN, MANAGER | Body: `CreateCustomerDto` |
+| GET | /v1/admin/customers | List all customers | JWT Bearer | Roles: OWNER, ADMIN, MANAGER, OPERATOR | Query: `filialId?` |
+| GET | /v1/admin/customers/:id | Get customer by ID | JWT Bearer | Roles: OWNER, ADMIN, MANAGER, OPERATOR | Path: `id` |
+| PATCH | /v1/admin/customers/:id | Update customer | JWT Bearer | Roles: OWNER, ADMIN, MANAGER | Path: `id`; Body: `UpdateCustomerDto` |
+| DELETE | /v1/admin/customers/:id | Delete customer | JWT Bearer | Roles: OWNER, ADMIN, MANAGER | Path: `id` |
+
+## Appointments (public + internal + customer portal + professional)
 
 | Method | Path | Summary | Auth | Roles / Scope | Payload & Params |
 | --- | --- | --- | --- | --- | --- |
 | GET | /v1/public/slots | Get available slots for services | Public (rate limited) | - | Query: `tenant`, `filialId`, `date` (ISO), `serviceIds` (comma list), `professionalId?` |
-| POST | /v1/public/appointments | Create appointment | Public (rate limited) | - | Query: `tenant`; Body: `CreateAppointmentDto` |
-| PATCH | /v1/public/appointments/:id/cancel | Cancel appointment | Public | - | Query: `tenant`; Path: `id`; Body: `CancelAppointmentDto` |
+| POST | /v1/public/appointments | Create appointment - **DEPRECATED** | Public (rate limited) | - | Query: `tenant`; Body: `CreateAppointmentDto` |
+| PATCH | /v1/public/appointments/:id/cancel | Cancel appointment - **DEPRECATED** | Public | - | Query: `tenant`; Path: `id`; Body: `CancelAppointmentDto` |
+| POST | /v1/admin/filiais/:filialId/appointments | Create appointment (internal/admin) | JWT Bearer | Roles: OWNER, ADMIN, MANAGER, OPERATOR, PROFESSIONAL | Path: `filialId`; Body: `CreateInternalAppointmentDto` |
+| POST | /v1/customer/appointments | Create appointment (customer portal) | JWT Bearer | Role: CUSTOMER | Body: `CreateCustomerAppointmentDto` |
+| GET | /v1/customer/appointments | List my appointments (customer) | JWT Bearer | Role: CUSTOMER | Query: `from?`, `to?`, `status?` |
+| PATCH | /v1/customer/appointments/:id/cancel | Cancel my appointment (customer) | JWT Bearer | Role: CUSTOMER | Path: `id`; Body: `CancelAppointmentDto` |
 | GET | /v1/me/professional | Get current professional profile & appointments | JWT Bearer | Role: PROFESSIONAL | Requires `professionalId` on JWT |
-| GET | /v1/me/appointments | List my appointments | JWT Bearer | Role: PROFESSIONAL | Query: `from?`, `to?`, `status?` |
+| GET | /v1/me/appointments | List my appointments (professional) | JWT Bearer | Role: PROFESSIONAL | Query: `from?`, `to?`, `status?` |
 | PATCH | /v1/me/appointments/:id/cancel | Cancel my appointment (validates notice) | JWT Bearer | Role: PROFESSIONAL | Path: `id`; Body: `CancelAppointmentDto` |
+
+## WhatsApp Integration
+
+| Method | Path | Summary | Auth | Roles / Scope | Payload & Params |
+| --- | --- | --- | --- | --- | --- |
+| POST | /v1/integrations/whatsapp/appointments | Create appointment from WhatsApp | Bearer token (WhatsApp Integration) | - | Body: `CreateWhatsappAppointmentDto` + `tenantSlug` |
 
 ## Blocks (admin + professional self-service)
 
@@ -114,3 +134,26 @@ This document enumerates all HTTP endpoints exposed by the ProAgenda backend so 
 - Metrics, professionals, and services admin APIs all apply `ScopeGuard` to ensure the authenticated user can access the path resources.
 - Professional self-service routes expect the JWT payload to include `professionalId`; otherwise an error is thrown.
 - Public endpoints commonly require the tenant slug via `tenant` query parameter to resolve the tenant context.
+- Customer portal routes expect the JWT payload to include a valid `userId` linked to a Customer record.
+- WhatsApp integration requires a `WHATSAPP_INTEGRATION_TOKEN` configured via environment variable.
+
+## Customer Types
+
+Appointments now track the customer type:
+- **REGISTERED**: Customer has a User account with login (role CUSTOMER)
+- **IDENTIFIED_NO_LOGIN**: Customer is identified with contact info but no login
+- **WALKIN_NAME_ONLY**: Walk-in customer with only name (no persistent Customer record)
+
+## Appointment Sources
+
+Appointments are tagged with their creation source:
+- **INTERNAL**: Created via admin/professional interface
+- **CUSTOMER_PORTAL**: Created by logged-in customer
+- **WHATSAPP**: Created via WhatsApp integration
+- **INTEGRATION**: Created via other integrations
+
+## Metrics
+
+The metrics endpoint (`/v1/admin/filiais/:id/metrics`) now includes:
+- `summary.bySource`: Breakdown of appointments by source (INTERNAL, CUSTOMER_PORTAL, WHATSAPP, INTEGRATION)
+- `summary.byCustomerType`: Breakdown of appointments by customer type (REGISTERED, IDENTIFIED_NO_LOGIN, WALKIN_NAME_ONLY)

@@ -40,6 +40,9 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   CORS_ORIGIN?: string;
+
+  @IsString()
+  WHATSAPP_INTEGRATION_TOKEN: string;
 }
 
 export function envValidation(config: Record<string, unknown>) {

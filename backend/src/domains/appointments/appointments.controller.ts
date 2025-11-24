@@ -4,6 +4,8 @@ import { Throttle } from '@nestjs/throttler';
 import { AppointmentsService } from './appointments.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { CreateInternalAppointmentDto } from './dto/create-internal-appointment.dto';
+import { CreateCustomerAppointmentDto } from './dto/create-customer-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -50,20 +52,153 @@ export class AppointmentsController {
   @Public()
   @Post('v1/public/appointments')
   @Throttle({ short: { limit: 3, ttl: 1000 } })
-  @ApiOperation({ summary: 'Create appointment (public)' })
+  @ApiOperation({ summary: 'Create appointment (public) - DEPRECATED', deprecated: true })
   create(@Query('tenant') tenant: string, @Body() dto: CreateAppointmentDto) {
     return this.appointmentsService.create(tenant, dto);
   }
 
   @Public()
   @Patch('v1/public/appointments/:id/cancel')
-  @ApiOperation({ summary: 'Cancel appointment (public)' })
+  @ApiOperation({ summary: 'Cancel appointment (public) - DEPRECATED', deprecated: true })
   cancelPublic(
     @Query('tenant') tenant: string,
     @Param('id') id: string,
     @Body() dto: CancelAppointmentDto,
   ) {
     return this.appointmentsService.cancel(tenant, id, dto);
+  }
+
+  // Admin/Internal endpoints
+  @Post('v1/admin/filiais/:filialId/appointments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.MANAGER, Role.OPERATOR, Role.PROFESSIONAL)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create appointment (internal/admin)' })
+  createInternal(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('filialId') filialId: string,
+    @Body() dto: CreateInternalAppointmentDto,
+  ) {
+    // Ensure filialId matches
+    if (dto.filialId !== filialId) {
+      dto.filialId = filialId;
+    }
+    return this.appointmentsService.createInternal(tenant, dto, user.sub);
+  }
+
+  // Customer Portal endpoints
+  @Post('v1/customer/appointments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create appointment (customer portal)' })
+  createFromCustomerPortal(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateCustomerAppointmentDto,
+  ) {
+    return this.appointmentsService.createFromCustomerPortal(tenant, user.sub, dto);
+  }
+
+  @Get('v1/customer/appointments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List my appointments (customer)' })
+  async getMyCustomerAppointments(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('status') status?: string,
+  ) {
+    // Find customer by userId
+    const tenantData = await this.tenantsService.findBySlug(tenant);
+    const customer = await this.appointmentsService['prisma'].customer.findFirst({
+      where: {
+        tenantId: tenantData.id,
+        userId: user.sub,
+      },
+    });
+
+    if (!customer) {
+      return [];
+    }
+
+    // Get all appointments where customerId matches
+    const where: any = {
+      tenantId: tenantData.id,
+      customerId: customer.id,
+    };
+
+    if (status) where.status = status;
+
+    if (from || to) {
+      where.AND = [];
+      if (from) where.AND.push({ startsAt: { gte: new Date(from) } });
+      if (to) where.AND.push({ startsAt: { lte: new Date(to) } });
+    }
+
+    return this.appointmentsService['prisma'].appointment.findMany({
+      where,
+      include: {
+        professional: {
+          select: { id: true, name: true },
+        },
+        filial: {
+          select: { id: true, name: true },
+        },
+        services: {
+          include: {
+            service: {
+              select: { id: true, name: true, durationMinutes: true },
+            },
+          },
+          orderBy: { order: 'asc' },
+        },
+      },
+      orderBy: { startsAt: 'asc' },
+    });
+  }
+
+  @Patch('v1/customer/appointments/:id/cancel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel my appointment (customer)' })
+  async cancelMyCustomerAppointment(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CancelAppointmentDto,
+  ) {
+    // Verify appointment belongs to customer
+    const tenantData = await this.tenantsService.findBySlug(tenant);
+    const customer = await this.appointmentsService['prisma'].customer.findFirst({
+      where: {
+        tenantId: tenantData.id,
+        userId: user.sub,
+      },
+    });
+
+    if (!customer) {
+      throw new Error('Customer not found');
+    }
+
+    const appointment = await this.appointmentsService['prisma'].appointment.findFirst({
+      where: {
+        id,
+        tenantId: tenantData.id,
+        customerId: customer.id,
+      },
+    });
+
+    if (!appointment) {
+      throw new Error('Appointment not found or does not belong to you');
+    }
+
+    return this.appointmentsService.cancel(tenant, id, dto, user.sub);
   }
 
   // Professional self-service routes
