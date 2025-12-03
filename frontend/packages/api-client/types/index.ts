@@ -295,6 +295,15 @@ export interface CreateInternalAppointmentDto {
   notes?: string;
 }
 
+export interface CreateCustomerAppointmentDto {
+  filialId: string;
+  serviceIds: string[];
+  date: string; // YYYY-MM-DD
+  start: string; // ISO 8601
+  professionalId?: string;
+  notes?: string;
+}
+
 export interface UpdateAppointmentDto {
   professionalId?: string;
   serviceIds?: string[];

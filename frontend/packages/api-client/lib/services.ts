@@ -22,6 +22,7 @@ import type {
   Appointment,
   CreateAppointmentDto,
   CreateInternalAppointmentDto,
+  CreateCustomerAppointmentDto,
   UpdateAppointmentDto,
   CancelAppointmentDto,
   Slot,
@@ -141,6 +142,51 @@ export const appointmentsApi = {
     client().post<Appointment>('/v1/public/appointments', data, { params: { tenant } }),
 };
 
+// Customer Auth
+export const customerAuthApi = {
+  sendMagicLink: (tenant: string, email: string) =>
+    client().post<{ sent: boolean; message: string; devLink?: string }>(
+      '/v1/customer/auth/send-magic-link',
+      { email },
+      { params: { tenant } }
+    ),
+  verifyMagicLink: (token: string, tenant: string) =>
+    client().get<{ user: any; accessToken: string; refreshToken: string }>(
+      '/v1/customer/auth/verify-magic-link',
+      { params: { token, tenant } }
+    ),
+};
+
+// Customer Appointments
+export const customerAppointmentsApi = {
+  list: (params?: {
+    from?: string;
+    to?: string;
+    status?: string;
+  }) => client().get<Appointment[]>('/v1/customer/appointments', { params }),
+  
+  getById: (id: string) =>
+    client().get<Appointment>(`/v1/customer/appointments/${id}`),
+  
+  create: (data: CreateCustomerAppointmentDto) =>
+    client().post<Appointment>('/v1/customer/appointments', data),
+  
+  cancel: (id: string, data: CancelAppointmentDto) =>
+    client().patch<Appointment>(`/v1/customer/appointments/${id}/cancel`, data),
+  
+  getHistory: () =>
+    client().get<Appointment[]>('/v1/customer/appointments/history'),
+  
+  getServiceHistory: () =>
+    client().get<Array<{
+      serviceIds: string[];
+      serviceNames: string[];
+      lastUsedAt: string;
+      appointmentId: string;
+      count: number;
+    }>>('/v1/customer/appointments/service-history'),
+};
+
 // Users
 export const usersApi = {
   create: (data: { name: string; email: string; password: string; phone?: string }) =>
@@ -170,6 +216,8 @@ export const api = {
   services: servicesApi,
   customers: customersApi,
   appointments: appointmentsApi,
+  customerAuth: customerAuthApi,
+  customerAppointments: customerAppointmentsApi,
   users: usersApi,
   metrics: metricsApi,
 };

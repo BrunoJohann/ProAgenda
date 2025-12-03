@@ -266,6 +266,30 @@ export class AppointmentsController {
     return this.appointmentsService.cancel(tenant, id, dto, user.sub);
   }
 
+  @Get('v1/customer/appointments/history')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get past appointments history (customer)' })
+  async getPastAppointments(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.appointmentsService.getPastAppointments(tenant, user.sub);
+  }
+
+  @Get('v1/customer/appointments/service-history')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get service combinations history for repeating appointments (customer)' })
+  async getServiceHistory(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.appointmentsService.getServiceHistory(tenant, user.sub);
+  }
+
   // Professional self-service routes
   @Get('v1/me/professional')
   @UseGuards(JwtAuthGuard, RolesGuard)

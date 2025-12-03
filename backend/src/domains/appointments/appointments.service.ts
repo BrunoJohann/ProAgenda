@@ -662,5 +662,129 @@ export class AppointmentsService {
 
     return this.cancel(tenantSlug, appointmentId, dto, userId);
   }
+
+  /**
+   * Get past appointments for logged-in customer
+   */
+  async getPastAppointments(tenantSlug: string, userId: string) {
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+
+    // Find customer by userId
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        tenantId: tenant.id,
+        userId,
+      },
+    });
+
+    if (!customer) {
+      return [];
+    }
+
+    const now = new Date();
+
+    return this.prisma.appointment.findMany({
+      where: {
+        tenantId: tenant.id,
+        customerId: customer.id,
+        startsAt: { lt: now },
+      },
+      include: {
+        professional: {
+          select: { id: true, name: true },
+        },
+        filial: {
+          select: { id: true, name: true },
+        },
+        services: {
+          include: {
+            service: {
+              select: { id: true, name: true, durationMinutes: true },
+            },
+          },
+          orderBy: { order: 'asc' },
+        },
+      },
+      orderBy: { startsAt: 'desc' },
+    });
+  }
+
+  /**
+   * Get service history - combinations of services used by customer
+   */
+  async getServiceHistory(tenantSlug: string, userId: string) {
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+
+    // Find customer by userId
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        tenantId: tenant.id,
+        userId,
+      },
+    });
+
+    if (!customer) {
+      return [];
+    }
+
+    // Get all past appointments with services
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        tenantId: tenant.id,
+        customerId: customer.id,
+        startsAt: { lt: new Date() },
+        status: 'CONFIRMED',
+      },
+      include: {
+        services: {
+          include: {
+            service: {
+              select: { id: true, name: true },
+            },
+          },
+          orderBy: { order: 'asc' },
+        },
+      },
+      orderBy: { startsAt: 'desc' },
+    });
+
+    // Group by service combination (serviceIds sorted)
+    const serviceMap = new Map<string, {
+      serviceIds: string[];
+      serviceNames: string[];
+      lastUsedAt: Date;
+      appointmentId: string;
+      count: number;
+    }>();
+
+    for (const appointment of appointments) {
+      const serviceIds = appointment.services
+        .map((as) => as.serviceId)
+        .sort()
+        .join(',');
+
+      const serviceNames = appointment.services
+        .map((as) => as.service.name)
+        .sort();
+
+      const existing = serviceMap.get(serviceIds);
+
+      if (!existing || appointment.startsAt > existing.lastUsedAt) {
+        serviceMap.set(serviceIds, {
+          serviceIds: serviceIds.split(','),
+          serviceNames,
+          lastUsedAt: appointment.startsAt,
+          appointmentId: appointment.id,
+          count: (existing?.count || 0) + 1,
+        });
+      } else {
+        existing.count += 1;
+      }
+    }
+
+    return Array.from(serviceMap.values()).sort(
+      (a, b) => b.lastUsedAt.getTime() - a.lastUsedAt.getTime(),
+    );
+  }
 }
 

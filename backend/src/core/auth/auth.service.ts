@@ -3,15 +3,22 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
+import * as crypto from 'crypto';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from './tokens/token.service';
 import { SessionsService } from './tokens/sessions.service';
+import { MagicLinkService } from './tokens/magic-link.service';
+import { EmailService } from '../email/email.service';
+import { TenantsService } from '../../domains/tenants/tenants.service';
+import { CustomersService } from '../../domains/customers/customers.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
+import { SendMagicLinkDto } from './dto/send-magic-link.dto';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +26,10 @@ export class AuthService {
     private prisma: PrismaService,
     private tokenService: TokenService,
     private sessionsService: SessionsService,
+    private magicLinkService: MagicLinkService,
+    private emailService: EmailService,
+    private tenantsService: TenantsService,
+    private customersService: CustomersService,
   ) {}
 
   async signup(dto: SignupDto, userAgent?: string, ip?: string) {
@@ -281,6 +292,219 @@ export class AuthService {
         email: result.user.email,
         tenant: invitation.tenant.slug,
         professionalId: result.professional.id,
+      },
+      ...tokens,
+    };
+  }
+
+  /**
+   * Send magic link for customer login
+   */
+  async sendMagicLink(tenantSlug: string, dto: SendMagicLinkDto) {
+    // Find tenant
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+
+    // Generate magic link token
+    const token = await this.magicLinkService.generateToken(dto.email, tenant.id);
+
+    // Build magic link URL
+    const frontendUrl = process.env.FRONTEND_CUSTOMER_URL || 'http://localhost:3004';
+    const magicLink = `/${tenantSlug}/auth/verify?token=${token}`;
+    const fullMagicLink = `${frontendUrl}${magicLink}`;
+
+    // Send email
+    await this.emailService.sendMagicLink(dto.email, fullMagicLink, tenant.name);
+
+    return {
+      sent: true,
+      message: 'Magic link sent to email',
+      // In development, always return the link for testing
+      devLink: fullMagicLink,
+    };
+  }
+
+  /**
+   * Verify magic link and create/login customer
+   */
+  async verifyMagicLink(token: string, tenantSlug: string, userAgent?: string, ip?: string) {
+    // Verify token
+    const { email, tenantId } = await this.magicLinkService.verifyToken(token);
+
+    // Verify tenant matches
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+    if (tenant.id !== tenantId) {
+      throw new BadRequestException('Invalid tenant for this magic link');
+    }
+
+    // Find or create user
+    let user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        tenant: true,
+        roleAssignments: {
+          where: { tenantId },
+          include: { filial: true },
+        },
+        customer: {
+          where: { tenantId },
+        },
+      },
+    });
+
+    // If user doesn't exist, create one
+    if (!user) {
+      // Check if customer exists
+      const existingCustomer = await this.customersService.findByEmail(tenantId, email);
+
+      user = await this.prisma.user.create({
+        data: {
+          tenantId,
+          name: existingCustomer?.name || email.split('@')[0],
+          email,
+          passwordHash: await argon2.hash(crypto.randomBytes(32).toString('hex')), // Random password, user won't use it
+          isEmailVerified: true,
+        },
+        include: {
+          tenant: true,
+          roleAssignments: {
+            where: { tenantId },
+            include: { filial: true },
+          },
+          customer: {
+            where: { tenantId },
+          },
+        },
+      });
+
+      // Link customer to user if exists
+      if (existingCustomer && !existingCustomer.userId) {
+        await this.prisma.customer.update({
+          where: { id: existingCustomer.id },
+          data: { userId: user!.id },
+        });
+      } else if (!existingCustomer) {
+        // Create customer if doesn't exist
+        await this.prisma.customer.create({
+          data: {
+            tenantId,
+            name: user!.name,
+            email: user!.email,
+            userId: user!.id,
+          },
+        });
+      }
+
+      // Create CUSTOMER role assignment
+      await this.prisma.roleAssignment.create({
+        data: {
+          tenantId,
+          userId: user!.id,
+          role: Role.CUSTOMER,
+        },
+      });
+    } else {
+      // User exists, ensure they have CUSTOMER role for this tenant
+      const hasCustomerRole = user.roleAssignments.some(
+        (ra) => ra.tenantId === tenantId && ra.role === Role.CUSTOMER,
+      );
+
+      if (!hasCustomerRole) {
+        await this.prisma.roleAssignment.create({
+          data: {
+            tenantId,
+            userId: user.id,
+            role: Role.CUSTOMER,
+          },
+        });
+      }
+
+      // Link customer if exists but not linked
+      const customer = await this.prisma.customer.findFirst({
+        where: {
+          tenantId,
+          email,
+          userId: null,
+        },
+      });
+
+      if (customer) {
+        await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: { userId: user.id },
+        });
+      } else {
+        // Create customer if doesn't exist
+        const existingCustomer = await this.prisma.customer.findFirst({
+          where: {
+            tenantId,
+            userId: user.id,
+          },
+        });
+
+        if (!existingCustomer) {
+          await this.prisma.customer.create({
+            data: {
+              tenantId,
+              name: user.name,
+              email: user.email,
+              userId: user.id,
+            },
+          });
+        }
+      }
+
+      // Mark email as verified
+      if (!user.isEmailVerified) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { isEmailVerified: true },
+        });
+      }
+    }
+
+    // Refresh user data with roles
+    const refreshedUser = await this.prisma.user.findUnique({
+      where: { id: user!.id },
+      include: {
+        tenant: true,
+        roleAssignments: {
+          where: { tenantId },
+          include: { filial: true },
+        },
+        customer: {
+          where: { tenantId },
+        },
+      },
+    });
+
+    if (!refreshedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    user = refreshedUser;
+
+    // Prepare roles
+    const roles = user.roleAssignments.map((ra) => ({
+      role: ra.role,
+      filialId: ra.filialId ?? undefined,
+    }));
+
+    // Generate tokens
+    const tokens = await this.tokenService.generateTokenPair(
+      user,
+      tenant.slug,
+      roles,
+      userAgent,
+      ip,
+    );
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        tenant: tenant.slug,
+        roles,
       },
       ...tokens,
     };

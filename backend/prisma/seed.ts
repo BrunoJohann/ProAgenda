@@ -6,18 +6,27 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting seed...');
 
-  // Create tenant
-  const tenant = await prisma.tenant.create({
-    data: {
+  // Create or get tenant
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: 'acme' },
+    update: {},
+    create: {
       name: 'Acme Corp',
       slug: 'acme',
     },
   });
-  console.log('✅ Created tenant: acme');
+  console.log('✅ Tenant ready: acme');
 
-  // Create filiais
-  const centro = await prisma.filial.create({
-    data: {
+  // Create or get filiais
+  const centro = await prisma.filial.upsert({
+    where: {
+      tenantId_slug: {
+        tenantId: tenant.id,
+        slug: 'centro',
+      },
+    },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'Centro',
       slug: 'centro',
@@ -27,8 +36,15 @@ async function main() {
     },
   });
 
-  const moinhos = await prisma.filial.create({
-    data: {
+  const moinhos = await prisma.filial.upsert({
+    where: {
+      tenantId_slug: {
+        tenantId: tenant.id,
+        slug: 'moinhos',
+      },
+    },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'Moinhos',
       slug: 'moinhos',
@@ -38,17 +54,21 @@ async function main() {
     },
   });
 
-  // Create filial settings
-  await prisma.filialSettings.create({
-    data: {
+  // Create or update filial settings
+  await prisma.filialSettings.upsert({
+    where: { filialId: centro.id },
+    update: {},
+    create: {
       tenantId: tenant.id,
       filialId: centro.id,
       slotGranularity: 15,
     },
   });
 
-  await prisma.filialSettings.create({
-    data: {
+  await prisma.filialSettings.upsert({
+    where: { filialId: moinhos.id },
+    update: {},
+    create: {
       tenantId: tenant.id,
       filialId: moinhos.id,
       slotGranularity: null, // Uses .env default
@@ -56,10 +76,12 @@ async function main() {
   });
   console.log('✅ Created filiais with settings');
 
-  // Create users
+  // Create or get users
   const ownerPassword = await argon2.hash('owner123');
-  const owner = await prisma.user.create({
-    data: {
+  const owner = await prisma.user.upsert({
+    where: { email: 'owner@acme.com' },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'Owner User',
       email: 'owner@acme.com',
@@ -69,8 +91,10 @@ async function main() {
   });
 
   const adminPassword = await argon2.hash('admin123');
-  const admin = await prisma.user.create({
-    data: {
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@acme.com' },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'Admin User',
       email: 'admin@acme.com',
@@ -80,8 +104,10 @@ async function main() {
   });
 
   const managerPassword = await argon2.hash('manager123');
-  const manager = await prisma.user.create({
-    data: {
+  const manager = await prisma.user.upsert({
+    where: { email: 'manager@acme.com' },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'Manager User',
       email: 'manager@acme.com',
@@ -91,8 +117,10 @@ async function main() {
   });
 
   const operatorPassword = await argon2.hash('operator123');
-  const operator = await prisma.user.create({
-    data: {
+  const operator = await prisma.user.upsert({
+    where: { email: 'operator@acme.com' },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'Operator User',
       email: 'operator@acme.com',
@@ -102,8 +130,10 @@ async function main() {
   });
 
   const profUserPassword = await argon2.hash('prof123');
-  const profUser = await prisma.user.create({
-    data: {
+  const profUser = await prisma.user.upsert({
+    where: { email: 'joao@acme.com' },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'João Silva',
       email: 'joao@acme.com',
@@ -112,10 +142,12 @@ async function main() {
     },
   });
 
-  // Create customer user (with login)
+  // Create or get customer user (with login)
   const customerPassword = await argon2.hash('customer123');
-  const customerUser = await prisma.user.create({
-    data: {
+  const customerUser = await prisma.user.upsert({
+    where: { email: 'roberto@example.com' },
+    update: {},
+    create: {
       tenantId: tenant.id,
       name: 'Roberto Cliente',
       email: 'roberto@example.com',
@@ -180,18 +212,27 @@ async function main() {
 
   console.log('✅ Created role assignments');
 
-  // Create customers
-  const customer1 = await prisma.customer.create({
-    data: {
+  // Create or get customers
+  let customer1 = await prisma.customer.findFirst({
+    where: {
       tenantId: tenant.id,
-      filialId: centro.id,
-      userId: customerUser.id, // Customer with login (REGISTERED)
-      name: 'Roberto Cliente',
-      email: 'roberto@example.com',
-      document: '12345678900',
-      documentType: 'CPF',
+      userId: customerUser.id,
     },
   });
+
+  if (!customer1) {
+    customer1 = await prisma.customer.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: centro.id,
+        userId: customerUser.id, // Customer with login (REGISTERED)
+        name: 'Roberto Cliente',
+        email: 'roberto@example.com',
+        document: '12345678900',
+        documentType: 'CPF',
+      },
+    });
+  }
 
   // Add phones for customer1
   await prisma.customerPhone.createMany({
@@ -211,136 +252,212 @@ async function main() {
     ],
   });
 
-  const customer2 = await prisma.customer.create({
-    data: {
+  let customer2 = await prisma.customer.findFirst({
+    where: {
       tenantId: tenant.id,
-      filialId: centro.id,
-      name: 'Maria Oliveira',
       email: 'maria.oliveira@example.com',
-      document: '98765432100',
-      documentType: 'CPF',
     },
   });
 
-  await prisma.customerPhone.create({
-    data: {
-      customerId: customer2.id,
-      phone: '+5511977776666',
-      type: 'WHATSAPP',
-      isPrimary: true,
-    },
-  });
+  if (!customer2) {
+    customer2 = await prisma.customer.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: centro.id,
+        name: 'Maria Oliveira',
+        email: 'maria.oliveira@example.com',
+        document: '98765432100',
+        documentType: 'CPF',
+      },
+    });
 
-  const customer3 = await prisma.customer.create({
-    data: {
+    await prisma.customerPhone.create({
+      data: {
+        customerId: customer2.id,
+        phone: '+5511977776666',
+        type: 'WHATSAPP',
+        isPrimary: true,
+      },
+    });
+  }
+
+  let customer3 = await prisma.customer.findFirst({
+    where: {
       tenantId: tenant.id,
-      name: 'Carlos Souza',
       email: 'carlos@example.com',
     },
   });
 
-  await prisma.customerPhone.create({
-    data: {
-      customerId: customer3.id,
-      phone: '+5511988887777',
-      type: 'MOBILE',
-      isPrimary: true,
-    },
-  });
+  if (!customer3) {
+    customer3 = await prisma.customer.create({
+      data: {
+        tenantId: tenant.id,
+        name: 'Carlos Souza',
+        email: 'carlos@example.com',
+      },
+    });
 
-  const customer4 = await prisma.customer.create({
-    data: {
+    await prisma.customerPhone.create({
+      data: {
+        customerId: customer3.id,
+        phone: '+5511988887777',
+        type: 'MOBILE',
+        isPrimary: true,
+      },
+    });
+  }
+
+  let customer4 = await prisma.customer.findFirst({
+    where: {
       tenantId: tenant.id,
-      filialId: moinhos.id,
-      name: 'Ana Paula Ferreira',
       email: 'ana.paula@example.com',
     },
   });
 
-  await prisma.customerPhone.createMany({
-    data: [
-      {
-        customerId: customer4.id,
-        phone: '+5511966665555',
+  if (!customer4) {
+    customer4 = await prisma.customer.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: moinhos.id,
+        name: 'Ana Paula Ferreira',
+        email: 'ana.paula@example.com',
+      },
+    });
+
+    await prisma.customerPhone.createMany({
+      data: [
+        {
+          customerId: customer4.id,
+          phone: '+5511966665555',
+          type: 'WHATSAPP',
+          isPrimary: true,
+        },
+        {
+          customerId: customer4.id,
+          phone: '+5511944443333',
+          type: 'HOME',
+          isPrimary: false,
+        },
+      ],
+    });
+  }
+
+  let customer5 = await prisma.customer.findFirst({
+    where: {
+      tenantId: tenant.id,
+      name: 'Paulo Mendes',
+      email: null,
+    },
+  });
+
+  if (!customer5) {
+    customer5 = await prisma.customer.create({
+      data: {
+        tenantId: tenant.id,
+        name: 'Paulo Mendes',
+      },
+    });
+
+    await prisma.customerPhone.create({
+      data: {
+        customerId: customer5.id,
+        phone: '+5511955554444',
         type: 'WHATSAPP',
         isPrimary: true,
       },
-      {
-        customerId: customer4.id,
-        phone: '+5511944443333',
-        type: 'HOME',
-        isPrimary: false,
-      },
-    ],
-  });
-
-  const customer5 = await prisma.customer.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'Paulo Mendes',
-    },
-  });
-
-  await prisma.customerPhone.create({
-    data: {
-      customerId: customer5.id,
-      phone: '+5511955554444',
-      type: 'WHATSAPP',
-      isPrimary: true,
-    },
-  });
+    });
+  }
 
   console.log('✅ Created customers and phones');
 
-  // Create professionals
-  const prof1Centro = await prisma.professional.create({
-    data: {
+  // Create or get professionals
+  let prof1Centro = await prisma.professional.findFirst({
+    where: {
       tenantId: tenant.id,
-      filialId: centro.id,
       userId: profUser.id,
-      name: 'João Silva',
-      bio: 'Barbeiro experiente com 10+ anos',
-      specialties: 'Corte, Barba, Design',
-      timezone: 'America/Sao_Paulo',
-      isActive: true,
     },
   });
 
-  const prof2Centro = await prisma.professional.create({
-    data: {
+  if (!prof1Centro) {
+    prof1Centro = await prisma.professional.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: centro.id,
+        userId: profUser.id,
+        name: 'João Silva',
+        bio: 'Barbeiro experiente com 10+ anos',
+        specialties: 'Corte, Barba, Design',
+        timezone: 'America/Sao_Paulo',
+        isActive: true,
+      },
+    });
+  }
+
+  let prof2Centro = await prisma.professional.findFirst({
+    where: {
       tenantId: tenant.id,
       filialId: centro.id,
       name: 'Maria Santos',
-      bio: 'Especialista em cortes modernos',
-      specialties: 'Corte, Coloração',
-      timezone: 'America/Sao_Paulo',
-      isActive: true,
     },
   });
 
-  const prof1Moinhos = await prisma.professional.create({
-    data: {
+  if (!prof2Centro) {
+    prof2Centro = await prisma.professional.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: centro.id,
+        name: 'Maria Santos',
+        bio: 'Especialista em cortes modernos',
+        specialties: 'Corte, Coloração',
+        timezone: 'America/Sao_Paulo',
+        isActive: true,
+      },
+    });
+  }
+
+  let prof1Moinhos = await prisma.professional.findFirst({
+    where: {
       tenantId: tenant.id,
       filialId: moinhos.id,
       name: 'Pedro Costa',
-      bio: 'Barbeiro clássico',
-      specialties: 'Corte, Barba',
-      timezone: 'America/Sao_Paulo',
-      isActive: true,
     },
   });
 
-  const prof2Moinhos = await prisma.professional.create({
-    data: {
+  if (!prof1Moinhos) {
+    prof1Moinhos = await prisma.professional.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: moinhos.id,
+        name: 'Pedro Costa',
+        bio: 'Barbeiro clássico',
+        specialties: 'Corte, Barba',
+        timezone: 'America/Sao_Paulo',
+        isActive: true,
+      },
+    });
+  }
+
+  let prof2Moinhos = await prisma.professional.findFirst({
+    where: {
       tenantId: tenant.id,
       filialId: moinhos.id,
       name: 'Ana Lima',
-      bio: 'Estilista profissional',
-      specialties: 'Corte, Penteado',
-      timezone: 'America/Sao_Paulo',
-      isActive: true,
     },
   });
+
+  if (!prof2Moinhos) {
+    prof2Moinhos = await prisma.professional.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: moinhos.id,
+        name: 'Ana Lima',
+        bio: 'Estilista profissional',
+        specialties: 'Corte, Penteado',
+        timezone: 'America/Sao_Paulo',
+        isActive: true,
+      },
+    });
+  }
 
   console.log('✅ Created professionals');
 
@@ -710,6 +827,106 @@ async function main() {
 
   console.log('✅ Created appointments');
 
+  // Check if past appointments already exist for customer1
+  const existingPastAppointments = await prisma.appointment.findMany({
+    where: {
+      tenantId: tenant.id,
+      customerId: customer1.id,
+      startsAt: { lt: new Date() },
+    },
+    take: 1,
+  });
+
+  // Only create past appointments if they don't exist
+  if (existingPastAppointments.length === 0) {
+    // Create past appointments for customer1 (Roberto Cliente) to test history
+    const pastDates = [
+      { daysAgo: 7, hour: 10, minute: 0 },   // 1 week ago
+      { daysAgo: 14, hour: 14, minute: 30 }, // 2 weeks ago
+      { daysAgo: 21, hour: 15, minute: 0 },  // 3 weeks ago
+      { daysAgo: 30, hour: 11, minute: 0 },  // 1 month ago
+      { daysAgo: 45, hour: 16, minute: 0 },  // 1.5 months ago
+      { daysAgo: 60, hour: 10, minute: 30 }, // 2 months ago
+    ];
+
+  const serviceCombinations = [
+    [corteCentro.id],                    // Only haircut
+    [corteCentro.id, barbaCentro.id],    // Haircut + Beard
+    [barbaCentro.id],                    // Only beard
+    [corteCentro.id, sobrancelhaCentro.id], // Haircut + Eyebrow
+  ];
+
+  for (let i = 0; i < pastDates.length; i++) {
+    const dateInfo = pastDates[i];
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - dateInfo.daysAgo);
+    pastDate.setHours(dateInfo.hour, dateInfo.minute, 0, 0);
+    pastDate.setSeconds(0, 0);
+
+    // Select service combination (cycle through them)
+    const serviceIds = serviceCombinations[i % serviceCombinations.length];
+    
+    // Calculate total duration
+    let totalDuration = 0;
+    for (const serviceId of serviceIds) {
+      let service;
+      if (serviceId === corteCentro.id) service = corteCentro;
+      else if (serviceId === barbaCentro.id) service = barbaCentro;
+      else if (serviceId === sobrancelhaCentro.id) service = sobrancelhaCentro;
+      else continue;
+      
+      totalDuration += service.durationMinutes + service.bufferMinutes;
+    }
+
+    const pastDateEnd = new Date(pastDate);
+    pastDateEnd.setMinutes(pastDateEnd.getMinutes() + totalDuration);
+
+    const pastAppt = await prisma.appointment.create({
+      data: {
+        tenantId: tenant.id,
+        filialId: centro.id,
+        professionalId: prof1Centro.id,
+        startsAt: pastDate,
+        endsAt: pastDateEnd,
+        customerId: customer1.id,
+        customerName: 'Roberto Cliente',
+        customerPhone: '+5511999998888',
+        customerEmail: 'roberto@example.com',
+        customerType: 'REGISTERED',
+        source: 'CUSTOMER_PORTAL',
+        status: 'CONFIRMED',
+        notes: `Agendamento passado - ${dateInfo.daysAgo} dias atrás`,
+      },
+    });
+
+    // Create appointment services
+    for (let j = 0; j < serviceIds.length; j++) {
+      await prisma.appointmentService.create({
+        data: {
+          tenantId: tenant.id,
+          appointmentId: pastAppt.id,
+          serviceId: serviceIds[j],
+          order: j,
+        },
+      });
+    }
+
+    // Create status history
+    await prisma.appointmentStatusHistory.create({
+      data: {
+        tenantId: tenant.id,
+        appointmentId: pastAppt.id,
+        toStatus: 'CONFIRMED',
+        reason: 'Appointment created via customer portal',
+      },
+    });
+    }
+
+    console.log('✅ Created past appointments for customer history');
+  } else {
+    console.log('✅ Past appointments already exist, skipping creation');
+  }
+
   // Create a pending invitation
   const inviteToken = 'sample-token-hash';
   const inviteExpiry = new Date();
@@ -739,7 +956,10 @@ async function main() {
   console.log('\n🏢 Tenant: acme');
   console.log('🏪 Filiais: centro, moinhos');
   console.log('👥 Customers: 5 customers with various phone types');
-  console.log('📅 Appointments: 5 appointments (INTERNAL, CUSTOMER_PORTAL, WHATSAPP sources)\n');
+  console.log('📅 Appointments: 5 future appointments + 6 past appointments for Roberto Cliente');
+  console.log('   - Past appointments: 7, 14, 21, 30, 45, 60 days ago');
+  console.log('   - Service combinations: Corte, Corte+Barba, Barba, Corte+Sobrancelha');
+  console.log('   - All with status CONFIRMED for history testing\n');
 }
 
 main()
