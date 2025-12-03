@@ -20,6 +20,9 @@ import type {
   CreateCustomerDto,
   Metrics,
   MetricsQuery,
+  CreateAppointmentDto,
+  Slot,
+  SlotsQuery,
 } from '../types';
 
 // Auth hooks
@@ -581,6 +584,66 @@ export function useRemoveRole() {
       // Invalidar e refetch imediatamente para atualizar a UI
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.refetchQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+// Public hooks for booking portal
+export function usePublicFiliais(tenant: string | undefined) {
+  return useQuery({
+    queryKey: ['public', 'filiais', tenant],
+    queryFn: async () => {
+      if (!tenant) throw new Error('Tenant required');
+      try {
+        const response = await api.filiais.listPublic(tenant);
+        return response.data;
+      } catch (error: any) {
+        console.error('Error fetching filiais:', error);
+        throw new Error(
+          error?.response?.data?.message || 
+          error?.message || 
+          'Erro ao carregar filiais. Verifique se o tenant está correto.'
+        );
+      }
+    },
+    enabled: !!tenant,
+    retry: 1,
+  });
+}
+
+export function usePublicServices(params: { tenant: string; filialId: string; professionalId?: string } | undefined) {
+  return useQuery({
+    queryKey: ['public', 'services', params],
+    queryFn: async () => {
+      if (!params) throw new Error('Params required');
+      const response = await api.services.listPublic(params);
+      return response.data;
+    },
+    enabled: !!params && !!params.tenant && !!params.filialId,
+  });
+}
+
+export function usePublicSlots(params: SlotsQuery | undefined) {
+  return useQuery({
+    queryKey: ['public', 'slots', params],
+    queryFn: async () => {
+      if (!params) throw new Error('Params required');
+      const response = await api.appointments.getSlots(params);
+      return response.data;
+    },
+    enabled: !!params && !!params.tenant && !!params.filialId && !!params.date && !!params.serviceIds,
+  });
+}
+
+export function useCreatePublicAppointment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ tenant, data }: { tenant: string; data: CreateAppointmentDto }) => {
+      const response = await api.appointments.createPublic(tenant, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['public', 'slots'] });
     },
   });
 }

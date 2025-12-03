@@ -219,9 +219,13 @@ export class AppointmentsService {
     const startsAt = new Date(dto.start);
     const endsAt = new Date(startsAt.getTime() + totalDuration * 60 * 1000);
 
-    // Validate start time is in the future
-    if (startsAt < new Date()) {
-      throw new BadRequestException('Cannot create appointment in the past');
+    // Validate start time is in the future (allow 5 minutes buffer for clock differences)
+    const now = new Date();
+    const minAllowedTime = new Date(now.getTime() - 5 * 60 * 1000); // 5 minutes buffer
+    if (startsAt < minAllowedTime) {
+      throw new BadRequestException(
+        'Não é possível criar agendamento no passado. Por favor, selecione uma data e horário futuros.',
+      );
     }
 
     // Transaction for anti-overbooking

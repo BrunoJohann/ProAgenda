@@ -20,6 +20,7 @@ import type {
   CreateCustomerDto,
   UpdateCustomerDto,
   Appointment,
+  CreateAppointmentDto,
   CreateInternalAppointmentDto,
   UpdateAppointmentDto,
   CancelAppointmentDto,
@@ -47,6 +48,8 @@ export const filiaisApi = {
   delete: (id: string) => client().delete(`/v1/admin/filiais/${id}`),
   updateSettings: (id: string, data: UpdateSettingsDto) =>
     client().patch(`/v1/admin/filiais/${id}/settings`, data),
+  // Public
+  listPublic: (tenant: string) => client().get<Filial[]>('/v1/public/filiais', { params: { tenant } }),
 };
 
 // Professionals
@@ -132,6 +135,10 @@ export const appointmentsApi = {
   
   // Slots públicos
   getSlots: (params: SlotsQuery) => client().get<Slot[]>('/v1/public/slots', { params }),
+  
+  // Public appointment creation
+  createPublic: (tenant: string, data: CreateAppointmentDto) =>
+    client().post<Appointment>('/v1/public/appointments', data, { params: { tenant } }),
 };
 
 // Users

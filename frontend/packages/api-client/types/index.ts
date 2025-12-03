@@ -264,6 +264,20 @@ export interface AppointmentService {
   order?: number;
 }
 
+export interface CreateAppointmentDto {
+  filialId: string;
+  serviceIds: string[];
+  date: string; // YYYY-MM-DD
+  start: string; // ISO 8601
+  professionalId?: string;
+  customer: {
+    name: string;
+    phone: string;
+    email?: string;
+  };
+  notes?: string;
+}
+
 export interface CreateInternalAppointmentDto {
   filialId: string;
   date: string; // YYYY-MM-DD
@@ -311,9 +325,13 @@ export interface SlotsQuery {
 }
 
 export interface Slot {
-  start: string;
-  professionalId: string;
-  professionalName: string;
+  start: string; // ISO 8601 string
+  end: string; // ISO 8601 string
+  professionalOptions: Array<{
+    professionalId: string;
+    professionalName: string;
+  }>;
+  recommendedProfessionalId: string;
 }
 
 // Metrics Types

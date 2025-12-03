@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { TenantsService } from '../tenants/tenants.service';
@@ -43,6 +43,20 @@ export class FiliaisService {
         address: dto.address,
         phone: dto.phone,
       },
+    });
+  }
+
+  async findAllPublic(tenantSlug: string) {
+    if (!tenantSlug) {
+      throw new BadRequestException('Tenant slug is required');
+    }
+
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+
+    return this.prisma.filial.findMany({
+      where: { tenantId: tenant.id },
+      include: { settings: true },
+      orderBy: { createdAt: 'asc' },
     });
   }
 
