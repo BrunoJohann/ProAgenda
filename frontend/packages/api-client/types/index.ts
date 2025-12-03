@@ -265,12 +265,35 @@ export interface AppointmentService {
 }
 
 export interface CreateInternalAppointmentDto {
-  professionalId?: string;
+  filialId: string;
+  date: string; // YYYY-MM-DD
+  start: string; // ISO 8601
   serviceIds: string[];
-  startsAt: string;
-  customerName: string;
-  customerPhone?: string;
-  customerEmail?: string;
+  professionalId?: string;
+  customerId?: string;
+  newCustomer?: {
+    name: string;
+    phone?: string;
+    email?: string;
+    document?: string;
+    documentType?: string;
+  };
+  notes?: string;
+}
+
+export interface UpdateAppointmentDto {
+  professionalId?: string;
+  serviceIds?: string[];
+  date?: string; // YYYY-MM-DD
+  start?: string; // ISO 8601
+  customerId?: string;
+  newCustomer?: {
+    name: string;
+    phone?: string;
+    email?: string;
+    document?: string;
+    documentType?: string;
+  };
   notes?: string;
 }
 

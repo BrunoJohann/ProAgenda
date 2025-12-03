@@ -6,6 +6,7 @@ import { SchedulingService } from '../scheduling/scheduling.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreateInternalAppointmentDto } from './dto/create-internal-appointment.dto';
 import { CreateCustomerAppointmentDto } from './dto/create-customer-appointment.dto';
+import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -85,6 +86,70 @@ export class AppointmentsController {
       dto.filialId = filialId;
     }
     return this.appointmentsService.createInternal(tenant, dto, user.sub);
+  }
+
+  @Get('v1/admin/appointments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.MANAGER, Role.OPERATOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List all appointments (admin)' })
+  async findAllAdmin(
+    @CurrentUser('tenant') tenant: string,
+    @Query('filialId') filialId?: string,
+    @Query('professionalId') professionalId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('status') status?: string,
+    @Query('customerId') customerId?: string,
+  ) {
+    return this.appointmentsService.findAll(
+      tenant,
+      filialId,
+      professionalId,
+      from,
+      to,
+      status,
+      customerId,
+    );
+  }
+
+  @Get('v1/admin/appointments/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.MANAGER, Role.OPERATOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get appointment by ID (admin)' })
+  async findOneAdmin(
+    @CurrentUser('tenant') tenant: string,
+    @Param('id') id: string,
+  ) {
+    return this.appointmentsService.findOne(tenant, id);
+  }
+
+  @Patch('v1/admin/appointments/:id/cancel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.MANAGER, Role.OPERATOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel appointment (admin)' })
+  async cancelAdmin(
+    @CurrentUser('tenant') tenant: string,
+    @Param('id') id: string,
+    @Body() dto: CancelAppointmentDto,
+  ) {
+    return this.appointmentsService.cancel(tenant, id, dto);
+  }
+
+  @Patch('v1/admin/appointments/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.MANAGER, Role.OPERATOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update appointment (admin)' })
+  async updateAdmin(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateAppointmentDto,
+  ) {
+    return this.appointmentsService.update(tenant, id, dto, user.sub);
   }
 
   // Customer Portal endpoints

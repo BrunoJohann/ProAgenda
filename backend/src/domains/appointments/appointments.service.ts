@@ -8,6 +8,7 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreateInternalAppointmentDto } from './dto/create-internal-appointment.dto';
 import { CreateCustomerAppointmentDto } from './dto/create-customer-appointment.dto';
 import { CreateWhatsappAppointmentDto } from './dto/create-whatsapp-appointment.dto';
+import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CustomerType, AppointmentSource } from '@prisma/client';
 
@@ -340,6 +341,7 @@ export class AppointmentsService {
     from?: string,
     to?: string,
     status?: string,
+    customerId?: string,
   ) {
     const tenant = await this.tenantsService.findBySlug(tenantSlug);
 
@@ -350,6 +352,7 @@ export class AppointmentsService {
     if (filialId) where.filialId = filialId;
     if (professionalId) where.professionalId = professionalId;
     if (status) where.status = status;
+    if (customerId) where.customerId = customerId;
 
     if (from || to) {
       where.AND = [];
@@ -411,6 +414,173 @@ export class AppointmentsService {
     }
 
     return appointment;
+  }
+
+  async update(tenantSlug: string, id: string, dto: UpdateAppointmentDto, userId?: string) {
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+
+    const appointment = await this.prisma.appointment.findFirst({
+      where: {
+        id,
+        tenantId: tenant.id,
+      },
+      include: {
+        services: {
+          include: {
+            service: true,
+          },
+        },
+        professional: true,
+        customer: true,
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    if (appointment.status === 'CANCELED') {
+      throw new BadRequestException('Cannot update a canceled appointment');
+    }
+
+    // Handle customer update
+    let customerId = appointment.customerId;
+    let customerName = appointment.customerName;
+    let customerPhone = appointment.customerPhone;
+    let customerEmail = appointment.customerEmail;
+
+    if (dto.customerId) {
+      const customer = await this.customersService.findOne(tenant.id, dto.customerId);
+      customerId = customer.id;
+      customerName = customer.name;
+      customerPhone = customer.phones?.[0]?.phone || null;
+      customerEmail = customer.email || null;
+    } else if (dto.newCustomer) {
+      const { customer } = await this.customersService.findOrCreateFromInternal(
+        tenant.id,
+        {
+          name: dto.newCustomer.name,
+          phone: dto.newCustomer.phone,
+          email: dto.newCustomer.email,
+          document: dto.newCustomer.document,
+          documentType: dto.newCustomer.documentType,
+          filialId: appointment.filialId,
+        },
+      );
+      if (customer) {
+        customerId = customer.id;
+        customerName = customer.name;
+        customerPhone = dto.newCustomer.phone || customer.phones?.[0]?.phone || null;
+        customerEmail = customer.email || null;
+      } else {
+        customerName = dto.newCustomer.name;
+        customerPhone = dto.newCustomer.phone || null;
+        customerEmail = dto.newCustomer.email || null;
+      }
+    }
+
+    // Calculate new start time
+    let newStartsAt = appointment.startsAt;
+    if (dto.start) {
+      newStartsAt = new Date(dto.start);
+    } else if (dto.date) {
+      const existingDate = new Date(appointment.startsAt);
+      const newDate = new Date(dto.date);
+      newStartsAt = new Date(
+        newDate.getFullYear(),
+        newDate.getMonth(),
+        newDate.getDate(),
+        existingDate.getHours(),
+        existingDate.getMinutes(),
+      );
+    }
+
+    // Calculate duration from services
+    let durationMinutes = 0;
+    if (dto.serviceIds && dto.serviceIds.length > 0) {
+      const services = await this.prisma.service.findMany({
+        where: {
+          id: { in: dto.serviceIds },
+          tenantId: tenant.id,
+        },
+      });
+      durationMinutes = services.reduce((sum, s) => sum + s.durationMinutes, 0);
+    } else {
+      // Calculate from existing services if not changed
+      const existingServices = await this.prisma.service.findMany({
+        where: {
+          id: { in: appointment.services.map((s: any) => s.serviceId) },
+          tenantId: tenant.id,
+        },
+      });
+      durationMinutes = existingServices.reduce((sum, s) => sum + s.durationMinutes, 0);
+    }
+
+    const endsAt = new Date(newStartsAt.getTime() + durationMinutes * 60000);
+
+    return this.prisma.$transaction(async (tx) => {
+      // Update services if changed
+      if (dto.serviceIds && dto.serviceIds.length > 0) {
+        // Delete existing services
+        await tx.appointmentService.deleteMany({
+          where: { appointmentId: id },
+        });
+
+        // Add new services
+        await tx.appointmentService.createMany({
+          data: dto.serviceIds.map((serviceId, index) => ({
+            tenantId: tenant.id,
+            appointmentId: id,
+            serviceId,
+            order: index,
+          })),
+        });
+      }
+
+      // Update appointment
+      const updateData: any = {};
+      
+      if (dto.professionalId) {
+        updateData.professionalId = dto.professionalId;
+      }
+      
+      if (dto.start || dto.date) {
+        updateData.startsAt = newStartsAt;
+        updateData.endsAt = endsAt;
+      }
+      
+      if (dto.customerId || dto.newCustomer) {
+        updateData.customerId = customerId;
+        updateData.customerName = customerName;
+        updateData.customerPhone = customerPhone;
+        updateData.customerEmail = customerEmail;
+      }
+      
+      if (dto.notes !== undefined) {
+        updateData.notes = dto.notes;
+      }
+
+      const updated = await tx.appointment.update({
+        where: { id },
+        data: updateData,
+        include: {
+          professional: {
+            select: { id: true, name: true },
+          },
+          filial: {
+            select: { id: true, name: true, timezone: true },
+          },
+          services: {
+            include: {
+              service: true,
+            },
+            orderBy: { order: 'asc' },
+          },
+        },
+      });
+
+      return updated;
+    });
   }
 
   async cancel(tenantSlug: string, id: string, dto: CancelAppointmentDto, userId?: string) {

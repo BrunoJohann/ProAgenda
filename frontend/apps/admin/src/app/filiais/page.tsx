@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { useFiliais, useCreateFilial, useDeleteFilial } from '@proagenda/api-client';
+import { useFiliais, useCreateFilial, useDeleteFilial, type Filial } from '@proagenda/api-client';
 import {
   Button,
   Card,
@@ -13,7 +13,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -28,20 +27,24 @@ import {
 } from '@proagenda/ui';
 import { Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import { FilialForm } from '@/components/filiais/filial-form';
+import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { toast } from 'sonner';
 
 export default function FiliaisPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingFilial, setEditingFilial] = useState<Filial | null>(null);
+  const [deletingFilial, setDeletingFilial] = useState<Filial | null>(null);
   const { data: filiais, isLoading } = useFiliais();
   const createMutation = useCreateFilial();
   const deleteMutation = useDeleteFilial();
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Tem certeza que deseja excluir a filial "${name}"?`)) return;
+  const handleDelete = async () => {
+    if (!deletingFilial) return;
     
     try {
-      await deleteMutation.mutateAsync(id);
+      await deleteMutation.mutateAsync(deletingFilial.id);
       toast.success('Filial excluída com sucesso');
+      setDeletingFilial(null);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao excluir filial');
     }
@@ -125,14 +128,20 @@ export default function FiliaisPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => setEditingFilial(filial)}
+                            title="Editar filial"
+                          >
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(filial.id, filial.name)}
+                            onClick={() => setDeletingFilial(filial)}
                             disabled={deleteMutation.isPending}
+                            title="Excluir filial"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -156,6 +165,41 @@ export default function FiliaisPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de Edição */}
+      <Dialog open={!!editingFilial} onOpenChange={(open) => !open && setEditingFilial(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Filial</DialogTitle>
+            <DialogDescription>
+              Atualize as informações da filial
+            </DialogDescription>
+          </DialogHeader>
+          {editingFilial && (
+            <FilialForm 
+              filial={editingFilial} 
+              onSuccess={() => setEditingFilial(null)} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação de Exclusão */}
+      <ConfirmDialog
+        open={!!deletingFilial}
+        onOpenChange={(open) => !open && setDeletingFilial(null)}
+        title="Excluir Filial"
+        description={
+          deletingFilial
+            ? `Tem certeza que deseja excluir a filial "${deletingFilial.name}"? Esta ação não pode ser desfeita.`
+            : ''
+        }
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        onConfirm={handleDelete}
+        isLoading={deleteMutation.isPending}
+        variant="destructive"
+      />
     </DashboardLayout>
   );
 }

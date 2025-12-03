@@ -21,6 +21,7 @@ import type {
   UpdateCustomerDto,
   Appointment,
   CreateInternalAppointmentDto,
+  UpdateAppointmentDto,
   CancelAppointmentDto,
   Slot,
   SlotsQuery,
@@ -110,8 +111,24 @@ export const customersApi = {
 export const appointmentsApi = {
   createInternal: (filialId: string, data: CreateInternalAppointmentDto) =>
     client().post<Appointment>(`/v1/admin/filiais/${filialId}/appointments`, data),
+  
+  list: (params?: {
+    filialId?: string;
+    professionalId?: string;
+    from?: string;
+    to?: string;
+    status?: string;
+    customerId?: string;
+  }) => client().get<Appointment[]>('/v1/admin/appointments', { params }),
+  
+  getById: (id: string) =>
+    client().get<Appointment>(`/v1/admin/appointments/${id}`),
+  
+  update: (id: string, data: UpdateAppointmentDto) =>
+    client().patch<Appointment>(`/v1/admin/appointments/${id}`, data),
+  
   cancel: (id: string, data: CancelAppointmentDto) =>
-    client().patch<Appointment>(`/v1/customer/appointments/${id}/cancel`, data),
+    client().patch<Appointment>(`/v1/admin/appointments/${id}/cancel`, data),
   
   // Slots públicos
   getSlots: (params: SlotsQuery) => client().get<Slot[]>('/v1/public/slots', { params }),
@@ -119,10 +136,13 @@ export const appointmentsApi = {
 
 // Users
 export const usersApi = {
-  create: (data: { name: string; email: string; password: string }) =>
+  create: (data: { name: string; email: string; password: string; phone?: string }) =>
     client().post<User>('/v1/admin/users', data),
   list: () => client().get<User[]>('/v1/admin/users'),
   getById: (id: string) => client().get<User>(`/v1/admin/users/${id}`),
+  update: (id: string, data: { name?: string; email?: string; phone?: string; password?: string }) =>
+    client().patch<User>(`/v1/admin/users/${id}`, data),
+  delete: (id: string) => client().delete(`/v1/admin/users/${id}`),
   getRoles: (id: string) => client().get(`/v1/admin/users/${id}/roles`),
   assignRole: (id: string, data: { role: string; filialId?: string }) =>
     client().post(`/v1/admin/users/${id}/roles`, data),

@@ -56,8 +56,33 @@ export function useLogout() {
 export function useMe(options?: UseQueryOptions<User>) {
   return useQuery({
     queryKey: ['auth', 'me'],
-    queryFn: () => authService.me(),
+    queryFn: async () => {
+      const user = await authService.me();
+      // Mapear roleAssignments para roles se necessário
+      if (user && 'roleAssignments' in user) {
+        return {
+          ...user,
+          roles: (user as any).roleAssignments || [],
+        } as User;
+      }
+      return user;
+    },
     ...options,
+  });
+}
+
+export function useUpdateMe() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { name?: string; phone?: string; password?: string }) => {
+      const response = await authService.updateMe(data);
+      return response;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['auth', 'me'], data);
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
   });
 }
 
@@ -147,6 +172,104 @@ export function useCreateProfessional() {
   });
 }
 
+export function useUpdateProfessional() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ filialId, id, data }: { filialId: string; id: string; data: any }) => {
+      const response = await api.professionals.update(filialId, id, data);
+      return response.data;
+    },
+    onSuccess: (_, { filialId }) => {
+      queryClient.invalidateQueries({ queryKey: ['professionals', filialId] });
+    },
+  });
+}
+
+export function useDeleteProfessional() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ filialId, id }: { filialId: string; id: string }) =>
+      api.professionals.delete(filialId, id),
+    onSuccess: (_, { filialId }) => {
+      queryClient.invalidateQueries({ queryKey: ['professionals', filialId] });
+    },
+  });
+}
+
+// Working Periods hooks
+export function useWorkingPeriods(filialId: string | undefined, professionalId: string | undefined) {
+  return useQuery({
+    queryKey: ['periods', filialId, professionalId],
+    queryFn: async () => {
+      if (!filialId || !professionalId) throw new Error('IDs required');
+      const response = await api.professionals.getPeriods(filialId, professionalId);
+      return response.data;
+    },
+    enabled: !!filialId && !!professionalId,
+  });
+}
+
+export function useCreatePeriod() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ filialId, professionalId, data }: any) => {
+      const response = await api.professionals.createPeriod(filialId, professionalId, data);
+      return response.data;
+    },
+    onSuccess: (_, { filialId, professionalId }) => {
+      queryClient.invalidateQueries({ queryKey: ['periods', filialId, professionalId] });
+    },
+  });
+}
+
+export function useDeletePeriod() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ filialId, professionalId, periodId }: any) =>
+      api.professionals.deletePeriod(filialId, professionalId, periodId),
+    onSuccess: (_, { filialId, professionalId }) => {
+      queryClient.invalidateQueries({ queryKey: ['periods', filialId, professionalId] });
+    },
+  });
+}
+
+// Blocks hooks
+export function useBlocks(professionalId: string | undefined, params?: { from?: string; to?: string }) {
+  return useQuery({
+    queryKey: ['blocks', professionalId, params],
+    queryFn: async () => {
+      if (!professionalId) throw new Error('Professional ID required');
+      const response = await api.professionals.getBlocks(professionalId, params);
+      return response.data;
+    },
+    enabled: !!professionalId,
+  });
+}
+
+export function useCreateBlock() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ professionalId, data }: any) => {
+      const response = await api.professionals.createBlock(professionalId, data);
+      return response.data;
+    },
+    onSuccess: (_, { professionalId }) => {
+      queryClient.invalidateQueries({ queryKey: ['blocks', professionalId] });
+    },
+  });
+}
+
+export function useDeleteBlock() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ professionalId, blockId }: any) =>
+      api.professionals.deleteBlock(professionalId, blockId),
+    onSuccess: (_, { professionalId }) => {
+      queryClient.invalidateQueries({ queryKey: ['blocks', professionalId] });
+    },
+  });
+}
+
 // Services hooks
 export function useServices(filialId: string | undefined) {
   return useQuery({
@@ -167,6 +290,52 @@ export function useCreateService() {
       const response = await api.services.create(filialId, data);
       return response.data;
     },
+    onSuccess: (_, { filialId }) => {
+      queryClient.invalidateQueries({ queryKey: ['services', filialId] });
+    },
+  });
+}
+
+export function useUpdateService() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ filialId, id, data }: any) => {
+      const response = await api.services.update(filialId, id, data);
+      return response.data;
+    },
+    onSuccess: (_, { filialId }) => {
+      queryClient.invalidateQueries({ queryKey: ['services', filialId] });
+    },
+  });
+}
+
+export function useDeleteService() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ filialId, id }: { filialId: string; id: string }) =>
+      api.services.delete(filialId, id),
+    onSuccess: (_, { filialId }) => {
+      queryClient.invalidateQueries({ queryKey: ['services', filialId] });
+    },
+  });
+}
+
+export function useLinkProfessionalToService() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ filialId, serviceId, professionalId }: any) =>
+      api.services.linkProfessional(filialId, serviceId, professionalId),
+    onSuccess: (_, { filialId }) => {
+      queryClient.invalidateQueries({ queryKey: ['services', filialId] });
+    },
+  });
+}
+
+export function useUnlinkProfessionalFromService() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ filialId, serviceId, professionalId }: any) =>
+      api.services.unlinkProfessional(filialId, serviceId, professionalId),
     onSuccess: (_, { filialId }) => {
       queryClient.invalidateQueries({ queryKey: ['services', filialId] });
     },
@@ -197,6 +366,29 @@ export function useCreateCustomer() {
   });
 }
 
+export function useUpdateCustomer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: any) => {
+      const response = await api.customers.update(id, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+}
+
+export function useDeleteCustomer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.customers.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+}
+
 // Metrics hooks
 export function useMetrics(filialId: string | undefined, params: MetricsQuery) {
   return useQuery({
@@ -204,9 +396,192 @@ export function useMetrics(filialId: string | undefined, params: MetricsQuery) {
     queryFn: async () => {
       if (!filialId) throw new Error('Filial ID required');
       const response = await api.metrics.get(filialId, params);
-      return response.data;
+      const backendData = response.data;
+      
+      // Mapear estrutura do backend para o formato esperado pelo frontend
+      return {
+        summary: {
+          totalAppointments: backendData.summary?.appointments || 0,
+          confirmedAppointments: backendData.summary?.appointments || 0,
+          canceledAppointments: backendData.summary?.cancellations || 0,
+          cancelRate: backendData.summary?.cancelRate || 0,
+          occupancyRate: backendData.summary?.occupancyPct || 0,
+          revenue: 0, // TODO: Calcular receita quando backend retornar
+          bySource: backendData.summary?.bySource,
+          byCustomerType: backendData.summary?.byCustomerType,
+        },
+        timeseries: (backendData.timeseries?.byDay || []).map((day: any) => ({
+          date: day.date,
+          appointments: day.appointments || 0,
+          revenue: 0, // TODO: Calcular receita quando backend retornar
+        })),
+        performance: {
+          avgDurationMinutes: backendData.summary?.avgDurationMin || 0,
+          avgBufferMinutes: 0, // TODO: Calcular quando backend retornar
+          peakHours: [], // TODO: Calcular quando backend retornar
+        },
+        serviceMix: (backendData.serviceMix || []).map((service: any) => ({
+          serviceId: service.serviceId,
+          serviceName: service.name || service.serviceName,
+          count: service.count || 0,
+          revenue: 0, // TODO: Calcular receita quando backend retornar
+        })),
+        heatmap: (backendData.heatmap?.weekdayHour || []).map((item: any) => ({
+          weekday: item.weekday,
+          hour: item.hour,
+          count: item.appointments || 0,
+        })),
+      };
     },
     enabled: !!filialId && !!params.from && !!params.to,
+  });
+}
+
+// Appointments hooks
+export function useAppointments(params?: {
+  filialId?: string;
+  professionalId?: string;
+  from?: string;
+  to?: string;
+  status?: string;
+  customerId?: string;
+}) {
+  return useQuery({
+    queryKey: ['appointments', params],
+    queryFn: async () => {
+      const response = await api.appointments.list(params);
+      return response.data;
+    },
+  });
+}
+
+export function useAppointment(id: string | undefined) {
+  return useQuery({
+    queryKey: ['appointments', id],
+    queryFn: async () => {
+      if (!id) throw new Error('ID required');
+      const response = await api.appointments.getById(id);
+      return response.data;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreateInternalAppointment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ filialId, data }: { filialId: string; data: any }) => {
+      const response = await api.appointments.createInternal(filialId, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.refetchQueries({ queryKey: ['appointments'] });
+    },
+  });
+}
+
+export function useUpdateAppointment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.appointments.update(id, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.refetchQueries({ queryKey: ['appointments'] });
+    },
+  });
+}
+
+export function useCancelAppointment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      api.appointments.cancel(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    },
+  });
+}
+
+// Users hooks
+export function useUsers() {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const response = await api.users.list();
+      // Mapear roleAssignments para roles (backend retorna roleAssignments, frontend espera roles)
+      const users = response.data.map((user: any) => ({
+        ...user,
+        roles: user.roleAssignments || [],
+      }));
+      return users;
+    },
+  });
+}
+
+export function useCreateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.users.create(data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.refetchQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.users.update(id, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.refetchQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.users.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.refetchQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+export function useAssignRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, data }: any) => api.users.assignRole(userId, data),
+    onSuccess: () => {
+      // Invalidar e refetch imediatamente para atualizar a UI
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.refetchQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+export function useRemoveRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, roleId }: any) => api.users.removeRole(userId, roleId),
+    onSuccess: () => {
+      // Invalidar e refetch imediatamente para atualizar a UI
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.refetchQueries({ queryKey: ['users'] });
+    },
   });
 }
 

@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -30,6 +31,22 @@ export class UsersController {
     return this.usersService.findAll(tenant);
   }
 
+  @Get('me')
+  @ApiOperation({ summary: 'Get current user' })
+  getMe(@CurrentUser('tenant') tenant: string, @CurrentUser('sub') userId: string) {
+    return this.usersService.findById(tenant, userId);
+  }
+
+  @Patch('me')
+  @ApiOperation({ summary: 'Update current user' })
+  updateMe(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser('sub') userId: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.usersService.update(tenant, userId, dto);
+  }
+
   @Get(':id')
   @Roles(Role.OWNER, Role.ADMIN)
   @ApiOperation({ summary: 'Get user by ID' })
@@ -56,6 +73,20 @@ export class UsersController {
   @ApiOperation({ summary: 'Remove role from user' })
   removeRole(@CurrentUser('tenant') tenant: string, @Param('id') id: string, @Param('roleId') roleId: string) {
     return this.usersService.removeRole(tenant, id, roleId);
+  }
+
+  @Patch(':id')
+  @Roles(Role.OWNER, Role.ADMIN)
+  @ApiOperation({ summary: 'Update user' })
+  update(@CurrentUser('tenant') tenant: string, @Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.usersService.update(tenant, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.OWNER, Role.ADMIN)
+  @ApiOperation({ summary: 'Delete user' })
+  remove(@CurrentUser('tenant') tenant: string, @Param('id') id: string) {
+    return this.usersService.remove(tenant, id);
   }
 }
 

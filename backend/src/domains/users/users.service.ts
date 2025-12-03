@@ -4,6 +4,7 @@ import { Role } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 
 @Injectable()
@@ -219,6 +220,96 @@ export class UsersService {
     });
 
     return { message: 'Role removed successfully' };
+  }
+
+  async update(tenantSlug: string, id: string, dto: UpdateUserDto) {
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+    await this.findOne(tenantSlug, id);
+
+    // Check if email is being changed and if it's already taken
+    if (dto.email) {
+      const existing = await this.prisma.user.findFirst({
+        where: {
+          email: dto.email,
+          tenantId: tenant.id,
+          NOT: { id },
+        },
+      });
+
+      if (existing) {
+        throw new ConflictException('Email already registered');
+      }
+    }
+
+    const updateData: any = {
+      ...(dto.name && { name: dto.name }),
+      ...(dto.email && { email: dto.email }),
+      ...(dto.phone !== undefined && { phone: dto.phone }),
+    };
+
+    // Hash password if provided
+    if (dto.password) {
+      updateData.passwordHash = await argon2.hash(dto.password);
+    }
+
+    return this.prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        isEmailVerified: true,
+        createdAt: true,
+        roleAssignments: {
+          include: {
+            filial: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async remove(tenantSlug: string, id: string) {
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+    const user = await this.findOne(tenantSlug, id);
+
+    // Check if user has OWNER role
+    const hasOwnerRole = user.roleAssignments?.some((r) => r.role === Role.OWNER);
+    
+    if (hasOwnerRole) {
+      const ownerCount = await this.prisma.roleAssignment.count({
+        where: {
+          tenantId: tenant.id,
+          role: Role.OWNER,
+        },
+      });
+
+      if (ownerCount <= 1) {
+        throw new BadRequestException('Cannot delete the last user with OWNER role');
+      }
+    }
+
+    // Check if user has appointments or other critical data
+    const appointmentCount = await this.prisma.appointment.count({
+      where: {
+        customerId: id,
+      },
+    });
+
+    if (appointmentCount > 0) {
+      throw new ConflictException('Cannot delete user with existing appointments. Consider deactivating instead.');
+    }
+
+    // Delete user (cascade will handle role assignments)
+    await this.prisma.user.delete({
+      where: { id },
+    });
+
+    return { message: 'User deleted successfully' };
   }
 }
 

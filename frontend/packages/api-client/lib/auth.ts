@@ -30,7 +30,12 @@ export class AuthService {
   }
 
   async me(): Promise<User> {
-    const response = await this.client.axios.get<User>('/v1/auth/me');
+    const response = await this.client.axios.get<User>('/v1/admin/users/me');
+    return response.data;
+  }
+
+  async updateMe(data: { name?: string; phone?: string; password?: string }): Promise<User> {
+    const response = await this.client.axios.patch<User>('/v1/admin/users/me', data);
     return response.data;
   }
 
