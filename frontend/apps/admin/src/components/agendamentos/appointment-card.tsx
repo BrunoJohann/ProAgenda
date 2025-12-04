@@ -80,3 +80,4 @@ export function AppointmentCard({ appointment, onClick }: AppointmentCardProps) 
 }
 
 
+
