@@ -29,7 +29,7 @@ import { toast } from 'sonner';
 
 export default function ServicosPage() {
   const { data: filiais } = useFiliais();
-  const [selectedFilialId, setSelectedFilialId] = useState<string>('');
+  const [selectedFilialId, setSelectedFilialId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
@@ -39,15 +39,36 @@ export default function ServicosPage() {
   const [linkingService, setLinkingService] = useState<Service | null>(null);
   const [deletingService, setDeletingService] = useState<Service | null>(null);
 
-  const { data: services, isLoading } = useServices(selectedFilialId || filiais?.[0]?.id);
+  const filialQueries = [
+    useServices(filiais?.[0]?.id || ''),
+    useServices(filiais?.[1]?.id || ''),
+    useServices(filiais?.[2]?.id || ''),
+    useServices(filiais?.[3]?.id || ''),
+    useServices(filiais?.[4]?.id || ''),
+  ];
+
+  const queryFilialId = selectedFilialId === 'all' ? filiais?.[0]?.id || '' : selectedFilialId;
+  const { data: services, isLoading } = useServices(queryFilialId);
+
+  const allServices = useMemo(() => {
+    if (selectedFilialId !== 'all') {
+      return services || [];
+    }
+
+    return filialQueries.flatMap((query) => query.data || []);
+  }, [selectedFilialId, services, ...filialQueries.map((q) => q.data)]);
+
+  const isLoadingAll = selectedFilialId === 'all' 
+    ? filialQueries.some((q) => q.isLoading)
+    : isLoading;
   const updateMutation = useUpdateService();
   const deleteMutation = useDeleteService();
 
   // Aplicar filtros
   const filteredData = useMemo(() => {
-    if (!services) return [];
+    if (!allServices || allServices.length === 0) return [];
 
-    return services.filter((service) => {
+    return allServices.filter((service: Service) => {
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'active' && service.isActive) ||
@@ -55,7 +76,7 @@ export default function ServicosPage() {
 
       return matchesStatus;
     });
-  }, [services, statusFilter]);
+  }, [allServices, statusFilter]);
 
   // Paginação
   const paginatedData = useMemo(() => {
@@ -105,6 +126,7 @@ export default function ServicosPage() {
   };
 
   const clearFilters = () => {
+    setSelectedFilialId('all');
     setStatusFilter('all');
   };
 
@@ -120,7 +142,7 @@ export default function ServicosPage() {
       label: 'Filial',
       render: (service) => (
         <Badge variant="secondary">
-          {filiais?.find((f) => f.id === service.filialId)?.name || '-'}
+          {filiais?.find((f: { id: string }) => f.id === service.filialId)?.name || '-'}
         </Badge>
       ),
     },
@@ -202,7 +224,7 @@ export default function ServicosPage() {
     },
   ];
 
-  const effectiveFilialId = selectedFilialId || filiais?.[0]?.id || '';
+  const effectiveFilialId = selectedFilialId === 'all' ? filiais?.[0]?.id || '' : selectedFilialId;
 
   return (
     <DashboardLayout>
@@ -250,7 +272,8 @@ export default function ServicosPage() {
                     setCurrentPage(1);
                   }}
                 >
-                  {filiais?.map((filial) => (
+                  <option value="all">Todos</option>
+                  {filiais?.map((filial: { id: string; name: string }) => (
                     <option key={filial.id} value={filial.id}>
                       {filial.name}
                     </option>
@@ -284,7 +307,7 @@ export default function ServicosPage() {
         <DataTable
           data={paginatedData}
           columns={columns}
-          isLoading={isLoading}
+          isLoading={isLoadingAll}
           getRowKey={(service) => service.id}
           emptyState={{
             title: 'Nenhum serviço encontrado',

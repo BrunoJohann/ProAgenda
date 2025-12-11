@@ -31,7 +31,7 @@ import { toast } from 'sonner';
 
 export default function ProfissionaisPage() {
   const { data: filiais } = useFiliais();
-  const [selectedFilialId, setSelectedFilialId] = useState<string>('');
+  const [selectedFilialId, setSelectedFilialId] = useState<string>('all');
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,16 +42,35 @@ export default function ProfissionaisPage() {
   const [workingHoursProfessional, setWorkingHoursProfessional] = useState<Professional | null>(null);
   const [blocksProfessional, setBlocksProfessional] = useState<Professional | null>(null);
   const [deletingProfessional, setDeletingProfessional] = useState<Professional | null>(null);
+  const queryFilialId = selectedFilialId === 'all' ? filiais?.[0]?.id || '' : selectedFilialId;
+  const { data: professionals, isLoading } = useProfessionals(queryFilialId);
 
-  const { data: professionals, isLoading } = useProfessionals(selectedFilialId || filiais?.[0]?.id);
+  const filialQueries = [
+    useProfessionals(filiais?.[0]?.id || ''),
+    useProfessionals(filiais?.[1]?.id || ''),
+    useProfessionals(filiais?.[2]?.id || ''),
+    useProfessionals(filiais?.[3]?.id || ''),
+    useProfessionals(filiais?.[4]?.id || ''),
+  ];
+
+  const allProfessionals = useMemo(() => {
+    if (selectedFilialId !== 'all') {
+      return professionals || [];
+    }
+
+    return filialQueries.flatMap((query) => query.data || []);
+  }, [selectedFilialId, professionals, ...filialQueries.map((q) => q.data)]);
+
+  const isLoadingAll = selectedFilialId === 'all' 
+    ? filialQueries.some((q) => q.isLoading)
+    : isLoading;
   const updateMutation = useUpdateProfessional();
   const deleteMutation = useDeleteProfessional();
 
-  // Aplicar filtros
   const filteredData = useMemo(() => {
-    if (!professionals) return [];
+    if (!allProfessionals || allProfessionals.length === 0) return [];
 
-    return professionals.filter((prof) => {
+    return allProfessionals.filter((prof: Professional) => {
       const matchesName = !nameFilter || prof.name.toLowerCase().includes(nameFilter.toLowerCase());
       const matchesStatus =
         statusFilter === 'all' ||
@@ -60,9 +79,8 @@ export default function ProfissionaisPage() {
 
       return matchesName && matchesStatus;
     });
-  }, [professionals, nameFilter, statusFilter]);
+  }, [allProfessionals, nameFilter, statusFilter]);
 
-  // Paginação
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredData.slice(start, start + pageSize);
@@ -103,6 +121,7 @@ export default function ProfissionaisPage() {
   };
 
   const clearFilters = () => {
+    setSelectedFilialId('all');
     setNameFilter('');
     setStatusFilter('all');
   };
@@ -126,7 +145,7 @@ export default function ProfissionaisPage() {
       label: 'Filial',
       render: (prof) => (
         <Badge variant="secondary">
-          {filiais?.find((f) => f.id === prof.filialId)?.name || '-'}
+          {filiais?.find((f: { id: string }) => f.id === prof.filialId)?.name || '-'}
         </Badge>
       ),
     },
@@ -205,7 +224,7 @@ export default function ProfissionaisPage() {
     },
   ];
 
-  const effectiveFilialId = selectedFilialId || filiais?.[0]?.id || '';
+  const effectiveFilialId = selectedFilialId === 'all' ? filiais?.[0]?.id || '' : selectedFilialId;
 
   return (
     <DashboardLayout>
@@ -220,7 +239,7 @@ export default function ProfissionaisPage() {
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-              <Button disabled={!effectiveFilialId}>
+              <Button disabled={selectedFilialId === 'all' || !effectiveFilialId}>
                 <Plus className="mr-2 h-4 w-4" />
                 Novo Profissional
               </Button>
@@ -253,7 +272,8 @@ export default function ProfissionaisPage() {
                     setCurrentPage(1);
                   }}
                 >
-                  {filiais?.map((filial) => (
+                  <option value="all">Todos</option>
+                  {filiais?.map((filial: { id: string; name: string }) => (
                     <option key={filial.id} value={filial.id}>
                       {filial.name}
                     </option>
@@ -302,7 +322,7 @@ export default function ProfissionaisPage() {
         <DataTable
           data={paginatedData}
           columns={columns}
-          isLoading={isLoading}
+          isLoading={isLoadingAll}
           getRowKey={(prof) => prof.id}
           emptyState={{
             title: 'Nenhum profissional encontrado',

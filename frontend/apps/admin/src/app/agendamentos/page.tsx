@@ -32,7 +32,7 @@ import { format, startOfDay, endOfDay } from 'date-fns';
 
 export default function AgendamentosPage() {
   const { data: filiais } = useFiliais();
-  const [selectedFilialId, setSelectedFilialId] = useState<string>('');
+  const [selectedFilialId, setSelectedFilialId] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [professionalFilter, setProfessionalFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -42,7 +42,45 @@ export default function AgendamentosPage() {
   const [detailAppointment, setDetailAppointment] = useState<Appointment | null>(null);
   const [cancelingAppointment, setCancelingAppointment] = useState<Appointment | null>(null);
 
-  const effectiveFilialId = selectedFilialId || filiais?.[0]?.id || '';
+ const filialQueries = [
+    useAppointments({
+      filialId: filiais?.[0]?.id || '',
+      professionalId: professionalFilter !== 'all' ? professionalFilter : undefined,
+      from: format(startOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      to: format(endOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    }),
+    useAppointments({
+      filialId: filiais?.[1]?.id || '',
+      professionalId: professionalFilter !== 'all' ? professionalFilter : undefined,
+      from: format(startOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      to: format(endOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    }),
+    useAppointments({
+      filialId: filiais?.[2]?.id || '',
+      professionalId: professionalFilter !== 'all' ? professionalFilter : undefined,
+      from: format(startOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      to: format(endOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    }),
+    useAppointments({
+      filialId: filiais?.[3]?.id || '',
+      professionalId: professionalFilter !== 'all' ? professionalFilter : undefined,
+      from: format(startOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      to: format(endOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    }),
+    useAppointments({
+      filialId: filiais?.[4]?.id || '',
+      professionalId: professionalFilter !== 'all' ? professionalFilter : undefined,
+      from: format(startOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      to: format(endOfDay(selectedDate), "yyyy-MM-dd'T'HH:mm:ss"),
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    }),
+  ];
+
+  const effectiveFilialId = selectedFilialId === 'all' ? filiais?.[0]?.id || '' : selectedFilialId;
   const { data: professionals } = useProfessionals(effectiveFilialId);
 
   // Buscar appointments da API com filtros
@@ -54,13 +92,25 @@ export default function AgendamentosPage() {
     status: statusFilter !== 'all' ? statusFilter : undefined,
   });
 
+  const allAppointments = useMemo(() => {
+    if (selectedFilialId !== 'all') {
+      return appointments || [];
+    }
+
+    return filialQueries.flatMap((query) => query.data || []);
+  }, [selectedFilialId, appointments, ...filialQueries.map((q) => q.data)]);
+
+  const isLoadingAll = selectedFilialId === 'all' 
+    ? filialQueries.some((q) => q.isLoading)
+    : isLoading;
+
   const cancelMutation = useCancelAppointment();
 
   // Aplicar filtros
   const filteredAppointments = useMemo(() => {
-    if (!appointments) return [];
+    if (!allAppointments || allAppointments.length === 0) return [];
 
-    return appointments.filter((apt) => {
+    return allAppointments.filter((apt: Appointment) => {
       const matchesProfessional =
         professionalFilter === 'all' || apt.professionalId === professionalFilter;
       const matchesStatus =
@@ -68,7 +118,7 @@ export default function AgendamentosPage() {
 
       return matchesProfessional && matchesStatus;
     });
-  }, [appointments, professionalFilter, statusFilter]);
+  }, [allAppointments, professionalFilter, statusFilter]);
 
   // Ordenar por horário
   const sortedAppointments = useMemo(() => {
@@ -94,6 +144,7 @@ export default function AgendamentosPage() {
   };
 
   const clearFilters = () => {
+    setSelectedFilialId('all');
     setProfessionalFilter('all');
     setStatusFilter('all');
   };
@@ -148,7 +199,8 @@ export default function AgendamentosPage() {
                   value={selectedFilialId}
                   onChange={(e) => setSelectedFilialId(e.target.value)}
                 >
-                  {filiais?.map((filial) => (
+                  <option value="all">Todos</option>
+                  {filiais?.map((filial: { id: string; name: string }) => (
                     <option key={filial.id} value={filial.id}>
                       {filial.name}
                     </option>
@@ -195,7 +247,7 @@ export default function AgendamentosPage() {
 
         {/* Lista de Agendamentos */}
         <div className="space-y-4">
-          {isLoading ? (
+          {isLoadingAll ? (
             <div className="space-y-3">
               {[1, 2, 3, 4].map((i) => (
                 <Skeleton key={i} className="h-32 w-full" />

@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
-
+// Esta página será redirecionada pelo middleware
 export default function HomePage() {
-  redirect('/dashboard');
+  return null;
 }
 
