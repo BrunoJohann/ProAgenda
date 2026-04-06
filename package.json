@@ -1,22 +1,19 @@
 {
-  "name": "proagenda-monorepo",
+  "name": "proagenda-backend-repo",
   "version": "1.0.0",
   "private": true,
-  "description": "ProAgenda - Sistema de Agendamento Multi-tenant",
+  "description": "ProAgenda backend repository",
   "packageManager": "pnpm@10.20.0",
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "clean": "turbo run clean",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
-    "type-check": "turbo run type-check"
-  },
-  "devDependencies": {
-    "@turbo/gen": "^2.3.3",
-    "prettier": "^3.4.2",
-    "turbo": "^2.3.3",
-    "typescript": "^5.7.2"
+    "dev": "pnpm --dir backend start:dev",
+    "start": "pnpm --dir backend start",
+    "build": "pnpm --dir backend build",
+    "lint": "pnpm --dir backend lint",
+    "test": "pnpm --dir backend test",
+    "test:e2e": "pnpm --dir backend test:e2e",
+    "prisma:generate": "pnpm --dir backend prisma:generate",
+    "prisma:migrate": "pnpm --dir backend prisma:migrate",
+    "prisma:seed": "pnpm --dir backend prisma:seed"
   },
   "engines": {
     "node": ">=20.0.0",

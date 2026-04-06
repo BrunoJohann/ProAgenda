@@ -6,9 +6,6 @@ node_modules
 # Testing
 coverage
 
-# Next.js
-.next/
-out/
 build
 dist/
 
@@ -26,15 +23,8 @@ yarn-error.log*
 .env
 .env*.local
 
-# Vercel
-.vercel
-
 # Typescript
 *.tsbuildinfo
-next-env.d.ts
-
-# Turbo
-.turbo
 
 # IDEs
 .vscode
@@ -50,12 +40,8 @@ Thumbs.db
 # Prisma
 prisma/migrations/*_tmp/
 
-
-
-
-
-
-
+.cursorignore
+.cursor
 
 
 
