@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Body, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { AppointmentStatus, Prisma, Role } from '@prisma/client';
 import { AppointmentsService } from './appointments.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreateInternalAppointmentDto } from './dto/create-internal-appointment.dto';
+import { CreateRecurringMonthlyAppointmentDto } from './dto/create-recurring-monthly-appointment.dto';
 import { CreateCustomerAppointmentDto } from './dto/create-customer-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
@@ -14,7 +16,6 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { TenantsService } from '../tenants/tenants.service';
-import { Role } from '@prisma/client';
 
 @ApiTags('Appointments')
 @Controller()
@@ -86,6 +87,27 @@ export class AppointmentsController {
       dto.filialId = filialId;
     }
     return this.appointmentsService.createInternal(tenant, dto, user.sub);
+  }
+
+  @Post('v1/admin/filiais/:filialId/appointments/recurring-monthly')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.MANAGER, Role.OPERATOR, Role.PROFESSIONAL)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create recurring monthly appointments (internal/admin)' })
+  createRecurringMonthly(
+    @CurrentUser('tenant') tenant: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('filialId') filialId: string,
+    @Body() dto: CreateRecurringMonthlyAppointmentDto,
+  ) {
+    if (dto.filialId !== filialId) {
+      dto.filialId = filialId;
+    }
+    return this.appointmentsService.createInternalRecurringMonthly(
+      tenant,
+      dto,
+      user.sub,
+    );
   }
 
   @Get('v1/admin/appointments')
@@ -192,12 +214,12 @@ export class AppointmentsController {
     }
 
     // Get all appointments where customerId matches
-    const where: any = {
+    const where: Prisma.AppointmentWhereInput = {
       tenantId: tenantData.id,
       customerId: customer.id,
     };
 
-    if (status) where.status = status;
+    if (status) where.status = status as AppointmentStatus;
 
     if (from || to) {
       where.AND = [];
@@ -346,4 +368,3 @@ export class AppointmentsController {
     );
   }
 }
-

@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsArray, IsISO8601, IsEmail, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
-class NewCustomerDto {
+export class NewCustomerDto {
   @ApiProperty({ example: 'João Silva' })
   @IsString()
   name: string;

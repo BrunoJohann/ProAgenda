@@ -7,10 +7,16 @@ import { CustomersService } from '../customers/customers.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreateInternalAppointmentDto } from './dto/create-internal-appointment.dto';
 import { CreateCustomerAppointmentDto } from './dto/create-customer-appointment.dto';
+import { CreateRecurringMonthlyAppointmentDto } from './dto/create-recurring-monthly-appointment.dto';
 import { CreateWhatsappAppointmentDto } from './dto/create-whatsapp-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
-import { CustomerType, AppointmentSource } from '@prisma/client';
+import {
+  AppointmentSource,
+  AppointmentStatus,
+  CustomerType,
+  Prisma,
+} from '@prisma/client';
 
 @Injectable()
 export class AppointmentsService {
@@ -112,6 +118,63 @@ export class AppointmentsService {
       customerType,
       AppointmentSource.INTERNAL,
     );
+  }
+
+  async createInternalRecurringMonthly(
+    tenantSlug: string,
+    dto: CreateRecurringMonthlyAppointmentDto,
+    userId?: string,
+  ) {
+    if (!dto.customerId && !dto.newCustomer) {
+      throw new BadRequestException('Either customerId or newCustomer must be provided');
+    }
+
+    const occurrences = this.buildMonthlyOccurrences(dto.month, dto.weekday);
+    const createdAppointments: Awaited<ReturnType<AppointmentsService['createInternal']>>[] = [];
+    const skippedOccurrences: Array<{
+      date: string;
+      start: string;
+      reason: string;
+    }> = [];
+
+    for (const date of occurrences) {
+      const start = `${date}T${dto.startTime}:00`;
+
+      try {
+        const created = await this.createInternal(
+          tenantSlug,
+          {
+            filialId: dto.filialId,
+            serviceIds: dto.serviceIds,
+            date,
+            start,
+            professionalId: dto.professionalId,
+            customerId: dto.customerId,
+            newCustomer: dto.newCustomer,
+            notes: dto.notes,
+          },
+          userId,
+        );
+
+        createdAppointments.push(created);
+      } catch (error) {
+        const reason =
+          error instanceof Error ? error.message : 'Unknown error while creating occurrence';
+
+        skippedOccurrences.push({ date, start, reason });
+      }
+    }
+
+    return {
+      month: dto.month,
+      weekday: dto.weekday,
+      startTime: dto.startTime,
+      totalOccurrences: occurrences.length,
+      createdCount: createdAppointments.length,
+      skippedCount: skippedOccurrences.length,
+      createdAppointments,
+      skippedOccurrences,
+    };
   }
 
   /**
@@ -349,13 +412,13 @@ export class AppointmentsService {
   ) {
     const tenant = await this.tenantsService.findBySlug(tenantSlug);
 
-    const where: any = {
+    const where: Prisma.AppointmentWhereInput = {
       tenantId: tenant.id,
     };
 
     if (filialId) where.filialId = filialId;
     if (professionalId) where.professionalId = professionalId;
-    if (status) where.status = status;
+    if (status) where.status = status as AppointmentStatus;
     if (customerId) where.customerId = customerId;
 
     if (from || to) {
@@ -513,7 +576,7 @@ export class AppointmentsService {
       // Calculate from existing services if not changed
       const existingServices = await this.prisma.service.findMany({
         where: {
-          id: { in: appointment.services.map((s: any) => s.serviceId) },
+          id: { in: appointment.services.map((s) => s.serviceId) },
           tenantId: tenant.id,
         },
       });
@@ -542,7 +605,7 @@ export class AppointmentsService {
       }
 
       // Update appointment
-      const updateData: any = {};
+      const updateData: Prisma.AppointmentUncheckedUpdateInput = {};
       
       if (dto.professionalId) {
         updateData.professionalId = dto.professionalId;
@@ -786,5 +849,37 @@ export class AppointmentsService {
       (a, b) => b.lastUsedAt.getTime() - a.lastUsedAt.getTime(),
     );
   }
-}
 
+  private buildMonthlyOccurrences(month: string, weekday: number): string[] {
+    const [yearText, monthText] = month.split('-');
+    const year = Number(yearText);
+    const monthIndex = Number(monthText) - 1;
+
+    if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+      throw new BadRequestException('Invalid month. Use YYYY-MM format');
+    }
+
+    const cursor = new Date(year, monthIndex, 1);
+    const occurrences: string[] = [];
+
+    while (cursor.getMonth() === monthIndex) {
+      if (cursor.getDay() === weekday) {
+        occurrences.push(this.formatDateOnly(cursor));
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (occurrences.length === 0) {
+      throw new BadRequestException('No matching weekday found in the requested month');
+    }
+
+    return occurrences;
+  }
+
+  private formatDateOnly(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+}
