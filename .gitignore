@@ -46,3 +46,6 @@ prisma/migrations/*_tmp/
 
 
 
+
+# Codex local plans
+.cursor/
